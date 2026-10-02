@@ -11,7 +11,8 @@ const UI = {
   init() {
     $('#btn-land').addEventListener('click', () => Input.landOrEmbark());
     $('#btn-center').addEventListener('click', () => Render.centerOnUnit());
-    $('#btn-codex').addEventListener('click', () => this.codex());
+    $('#btn-codex').addEventListener('click', () => { this.codex(); this.closeMore(); });
+    $('#btn-colonies').addEventListener('click', () => this.coloniesDialog());
     $('#btn-disc').addEventListener('click', () => this.discoveriesDialog());
     $('#btn-careen').addEventListener('click', () => this.careen());
     $('#btn-forage').addEventListener('click', () => Game.forage());
@@ -43,7 +44,42 @@ const UI = {
     });
   },
   buildingDone(st) {
-    if (this.open && this.colonyOpen && this.colonyOpen.st === st) this.colonyDialog(st, this.colonyOpen.fromShip);
+    if (this.open && this.colonyOpen && this.colonyOpen.st === st) this.colonyDialog(st, this.colonyOpen.fromShip, this.colonyOpen.fromPanel);
+    else if (this.open && this.panelOpen) this.coloniesDialog();
+  },
+
+  // all colonies at a glance, nearest first
+  coloniesDialog() {
+    const s = Game.s, u = Game.active();
+    const cols = Game.colonies().map((st) => { Game.ensureColony(st); return { st, d: Math.hypot(st.x - u.x, st.y - u.y) }; }).sort((a, b) => a.d - b.d);
+    const act = {};
+    const cards = cols.map(({ st, d }) => {
+      const b = st.buildings, q = st.queue;
+      const where = Game.nearColony(st) ? '<b class="good">You are here</b>' : `≈ ${fmt(Math.max(1, Math.round(d * 10)))} leagues away`;
+      let build;
+      if (q.length) {
+        const j = q[0], B = BUILDINGS[j.b];
+        build = `<div class="cc-build">${B.icon} ${B.name} → ${j.level} <span class="bar"><span class="timer-bar" data-done="${j.done}" data-ms="${j.ms}" style="width:${Math.round(clamp(1 - (j.done - Date.now()) / j.ms, 0, 1) * 100)}%"></span></span> <small class="timer" data-done="${j.done}">${fmtDuration(j.done - Date.now())} left</small>${q.length > 1 ? ` <small>+${q.length - 1} queued</small>` : ''}</div>`;
+      } else build = '<div class="cc-build idle">🔨 Builders idle — open the city to start construction</div>';
+      const threats = Raids.threatsTo(st).map((w) => `<div class="bad">⚔ ${fmt(w.warriors)} ${CULTURES[w.culture].name} warriors are marching on ${st.name}!</div>`).join('');
+      const risk = Raids.revoltRisk(st);
+      const levels = Object.entries(BUILDINGS).filter(([k]) => b[k]).map(([k, B]) => `${B.icon}${b[k]}`).join(' ') || '<i>no buildings yet</i>';
+      act['open-' + st.id] = () => this.colonyDialog(st, false, true);
+      act['map-' + st.id] = () => { this.close(); Render.free = true; Render.cx = st.x + 0.5; Render.cy = st.y + 0.5; };
+      return `<div class="ccard${threats ? ' threat' : ''}">
+        <div class="cc-head"><b>🏰 ${st.name}</b><span class="small">${where}</span></div>
+        <div class="small">Formerly a ${SETTLEMENT_TYPES[st.type].label.toLowerCase()} of the ${CULTURES[st.culture].name}</div>
+        <div class="cc-stats"><span title="Population">👥 ${fmt(st.pop)}</span><span title="Christians">✝️ ${st.converted}%</span><span title="Treasury">🪙 ${fmt(st.treasury)}</span><span title="Granary">🌽 ${fmt(st.store)}</span><span title="Defence strength">🛡️ ${fmt(Game.garrisonStrength(st))}</span></div>
+        <div class="cc-levels">${levels}</div>
+        ${build}${threats}${risk > 0 ? `<div class="warn">Unrest: ${Math.round(risk * 100)}% risk of revolt each month</div>` : ''}
+        <div class="cc-btns"><button data-act="open-${st.id}">Open city</button><button data-act="map-${st.id}">Show on map</button></div>
+      </div>`;
+    }).join('');
+    const html = cols.length
+      ? `<p class="sub">${cols.length} ${cols.length === 1 ? 'colony' : 'colonies'}, nearest first. Construction can be ordered from anywhere.</p><div class="clist">${cards}</div>`
+      : '<p>You have no colonies yet. Conquer a native town and it becomes a Spanish colony you can build up here.</p>';
+    this.dialog('🏰 Your colonies', html, [['Close', () => this.close()]], false, act);
+    this.panelOpen = true;
   },
 
   closeMore() { $('#actions').classList.remove('more-open'); },
@@ -77,6 +113,10 @@ const UI = {
     $('#btn-land').innerHTML = s.party ? '<span class="ico">⛵</span><span class="lbl">Embark</span>' : '<span class="ico">🚣</span><span class="lbl">Land</span>';
     $('#btn-careen').style.display = (!s.party && s.hull < sh.hull * 0.6) ? '' : 'none';
     $('#btn-forage').style.display = s.party ? '' : 'none';
+    const cols = Game.colonies();
+    const alert = cols.some((c) => Raids.threatsTo(c).length);
+    $('#col-badge').textContent = cols.length || '';
+    $('#col-badge').className = `badge${cols.length ? '' : ' hidden'}${alert ? ' alert' : ''}`;
     $('#mode').textContent = s.party ? 'Expedition on land — click to march, click the ship to re-embark' : 'At sea — click to sail, click land to send an expedition ashore';
   },
 
@@ -111,6 +151,7 @@ const UI = {
     this.open = true;
     this.townOpen = false;
     this.colonyOpen = null;
+    this.panelOpen = false;
     this.closable = !noBgClose;
     Input.stop();
     const m = $('#modal');
@@ -246,13 +287,14 @@ const UI = {
     }
   },
 
-  colonyDialog(st, fromShip) {
+  colonyDialog(st, fromShip, fromPanel) {
     const s = Game.s, sh = Game.ship();
     Game.ensureColony(st);
+    const here = Game.nearColony(st);
     const b = st.buildings, g = st.garrison;
     const coastal = !!Game.adjacentWater(st.x, st.y);
     const shipHere = Math.abs(s.ship.x - st.x) <= 1 && Math.abs(s.ship.y - st.y) <= 1;
-    const re = () => this.colonyDialog(st, fromShip);
+    const re = () => this.colonyDialog(st, fromShip, fromPanel);
     const act = {};
     // construction queue
     const queue = st.queue.map((q, i) => {
@@ -281,7 +323,8 @@ const UI = {
     const room = sh.men - s.soldiers;
     const repairPrice = b.harbor ? 1 : 3;
     const svc = [];
-    const add = (key, label, fn, disabled, tip) => { act[key] = () => { fn(); re(); }; svc.push(`<button data-act="${key}" ${disabled ? 'disabled' : ''} title="${tip || ''}">${label}</button>`); };
+    const away = 'Visit the colony to do this';
+    const add = (key, label, fn, disabled, tip) => { act[key] = () => { fn(); re(); }; svc.push(`<button data-act="${key}" ${disabled || !here ? 'disabled' : ''} title="${here ? tip || '' : away}">${label}</button>`); };
     add('tribute', `🪙 Collect tribute (${fmt(st.treasury)})`, () => { s.treasure += st.treasury; Game.log(`Collected ${fmt(st.treasury)} tribute at ${st.name}.`, 'good'); st.treasury = 0; }, st.treasury <= 0);
     add('store', `🌽 Collect provisions (${fmt(st.store)})`, () => { const got = Game.addFood(st.store); st.store -= got; }, st.store <= 0 || s.food >= sh.food);
     add('food', '🍖 Buy 150 provisions (80)', () => { if (Game.spend(80)) Game.addFood(150); }, !Game.canAfford(80) || s.food >= sh.food);
@@ -310,7 +353,7 @@ const UI = {
     }
     // garrison
     const gar = [];
-    const gadd = (key, label, fn, disabled) => { act[key] = () => { fn(); re(); }; gar.push(`<button data-act="${key}" ${disabled ? 'disabled' : ''}>${label}</button>`); };
+    const gadd = (key, label, fn, disabled) => { act[key] = () => { fn(); re(); }; gar.push(`<button data-act="${key}" ${disabled || !here ? 'disabled' : ''} title="${here ? '' : away}">${label}</button>`); };
     gadd('g-s-in', '⬇ Station 10 soldiers', () => { s.soldiers -= 10; g.soldiers += 10; Game.clampArmy(); }, s.soldiers <= 10);
     gadd('g-s-out', '⬆ Take 10 soldiers', () => { g.soldiers -= 10; s.soldiers += 10; }, g.soldiers < 10 || room < 10);
     gadd('g-a-in', '⬇ Station 50 auxiliaries', () => { const n = Math.min(50, s.auxiliaries); s.auxiliaries -= n; g.aux += n; }, s.auxiliaries <= 0);
@@ -330,9 +373,12 @@ const UI = {
       <h3>Garrison</h3><div class="svc">${gar.join('')}</div>
       <p class="small">Building costs are paid from the city treasury first, then your purse. Construction runs in real time and continues while the game is closed.</p>
       ${b.mine ? `<p class="flavor">Under the encomienda and the mita, the people of ${st.name} are forced to dig in the mines. ${fmt(Game.s.stats.labourDeaths)} have died in forced labour across your colonies.</p>` : ''}`;
-    this.dialog(`🏰 ${st.name}`, html, [['Leave', () => this.close()]], false, act);
+    const awayNote = here ? '' : `<p class="away-note">You are far from ${st.name}. You can order construction from here, but you must visit to collect tribute, recruit, trade or move the garrison.</p>`;
+    const buttons = [['Leave', () => this.close()]];
+    if (fromPanel) buttons.unshift(['← All colonies', () => this.coloniesDialog()]);
+    this.dialog(`🏰 ${st.name}`, awayNote + html, buttons, false, act);
     this.townOpen = true;
-    this.colonyOpen = { st, fromShip };
+    this.colonyOpen = { st, fromShip, fromPanel };
   },
 
   // ------------------------------------------------------------ Sevilla

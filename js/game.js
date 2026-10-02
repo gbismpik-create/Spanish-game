@@ -685,6 +685,11 @@ const Game = {
     if (st.horsesAvail == null) st.horsesAvail = 0;
   },
   colonies() { return this.s.settlements.filter((st) => st.conquered); },
+  // is the ship or the expedition at this colony?
+  nearColony(st) {
+    const s = this.s, near = (u) => u && Math.max(Math.abs(u.x - st.x), Math.abs(u.y - st.y)) <= 2;
+    return near(s.party) || near(s.ship);
+  },
   nearestColony(x, y, maxDist) {
     let best = null, bd = maxDist;
     for (const st of this.colonies()) { const d = Math.hypot(st.x - x, st.y - y); if (d <= bd) { bd = d; best = st; } }

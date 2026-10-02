@@ -2,7 +2,7 @@
 // Service worker: lets the installed app start offline.
 // Network first, so every push is picked up while online; the cache is the
 // offline fallback. When adding a game file, list it in FILES below.
-const CACHE = 'conquista-v2';
+const CACHE = 'conquista-v3';
 const FILES = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
   'js/data.js', 'js/world.js', 'js/game.js', 'js/battle.js', 'js/raids.js', 'js/audio.js', 'js/ui.js', 'js/main.js',
