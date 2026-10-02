@@ -6,7 +6,7 @@ Guidance for working on **Conquista: The New World (1492–1600)**, a browser st
 
 - Plain HTML/CSS/JavaScript. There is no build step for development, no bundler, no npm dependencies and no framework.
 - Open `index.html` in a browser, or serve the folder: `npx http-server -p 8123 -c-1 .` and visit `http://localhost:8123`.
-- Scripts are classic `<script>` tags (not ES modules) loaded in a fixed order in `index.html`: `data.js` → `world.js` → `game.js` → `battle.js` → `raids.js` → `ui.js` → `main.js`. Each file defines globals (`World`, `Game`, `Battle`, `Raids`, `UI`, `Render`, `Input`, `Main`) used by later files. Keep that order when adding files.
+- Scripts are classic `<script>` tags (not ES modules) loaded in a fixed order in `index.html`: `data.js` → `world.js` → `game.js` → `battle.js` → `raids.js` → `audio.js` → `ui.js` → `main.js`. Each file defines globals (`World`, `Game`, `Battle`, `Raids`, `Sound`, `UI`, `Render`, `Input`, `Main`) used by later files. Keep that order when adding files.
 
 ## Testing
 
@@ -27,6 +27,7 @@ Guidance for working on **Conquista: The New World (1492–1600)**, a browser st
 | `js/game.js` | Game state `Game.s` and rules: new game setup, time and provisions (`advance`, `monthly`), ship and party movement (`shipStep`, `partyStep`), sea and land events, discoveries, ruins, diplomacy, disease, conquest, foraging, friars (`preach`), Sevilla's treasury, scoring, save/load. |
 | `js/battle.js` | Turn-based combat: `TACTICS`, per-culture `WAR_STYLES`, terrain effects (`battleGround`), wounds, fatigue, morale. |
 | `js/raids.js` | Native counter-attacks: war parties (`Game.s.warParties`) that spawn monthly, march across the map, attack the expedition or colonies; raid resolution against garrisons and walls; counter-offensives after a city falls; colonial revolts. Battles that start mid-move go through `Game.pendingBattle`, which `Input.update` starts once no dialog is open. |
+| `js/audio.js` | `Sound`: all audio synthesised with the Web Audio API, with no audio files. Procedural music per mood (`MOODS`: title, sea, land, battle, town) in Iberian modes and progressions (La Folía, the Andalusian cadence), ambience (waves, wind, jungle, birds, gulls) and sound effects (`Sound.sfx`). Named `Sound` because `Audio` is a browser global. It starts on the first user gesture. Game events trigger sounds mainly through `Sound.onLog` (called from `Game.log`), plus direct hooks in battles and movement. Volume settings are stored in `localStorage` key `conquista-audio`. |
 | `js/ui.js` | HUD, ship's log, toasts and banners, and every dialog: encounters, colonies, the Sevilla port, codex, atlas, help, end screen. |
 | `js/main.js` | Canvas rendering (`Render`), sprites, fog of war, minimap, mouse/keyboard input and click-to-move orders (`Input`), the main loop and boot (`Main`). |
 | `css/style.css` | All styling. Parchment dialogs on a dark map, with gold accents. |
@@ -63,7 +64,7 @@ Guidance for working on **Conquista: The New World (1492–1600)**, a browser st
 
 ## Publishing
 
-The playable claude.ai artifact is a single bundled HTML file: the `<body>` of `index.html` with `css/style.css` and the seven JS files inlined in load order, without its own `<html>`/`<head>` tags. Generate it with `node build.js` (plain Node, no dependencies). Never edit the bundle by hand.
+The playable claude.ai artifact is a single bundled HTML file: the `<body>` of `index.html` with `css/style.css` and the eight JS files inlined in load order, without its own `<html>`/`<head>` tags. Generate it with `node build.js` (plain Node, no dependencies). Never edit the bundle by hand.
 
 ## Current status
 
@@ -80,6 +81,7 @@ The playable claude.ai artifact is a single bundled HTML file: the `<body>` of `
 - Turn-based battles with tactics and per-culture war styles
 - Sevilla port and treasury, scoring, end screen with human cost
 - Save/load
+- Audio: procedural music that follows the situation, ambience, sound effects, and a 🔊 settings panel
 
 **Next**
 1. Create `build.js` and switch Publishing to use it.

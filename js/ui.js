@@ -16,6 +16,7 @@ const UI = {
     $('#btn-careen').addEventListener('click', () => this.careen());
     $('#btn-forage').addEventListener('click', () => Game.forage());
     $('#btn-help').addEventListener('click', () => this.help());
+    $('#btn-sound').addEventListener('click', () => this.soundDialog());
     $('#btn-save').addEventListener('click', () => Game.save(false));
     $('#btn-zin').addEventListener('click', () => Render.zoomBy(1.25));
     $('#btn-zout').addEventListener('click', () => Render.zoomBy(0.8));
@@ -83,6 +84,7 @@ const UI = {
 
   dialog(title, html, buttons = [], noBgClose = false, actions = {}) {
     this.open = true;
+    this.townOpen = false;
     this.closable = !noBgClose;
     Input.stop();
     const m = $('#modal');
@@ -303,6 +305,7 @@ const UI = {
       <p class="small">Building costs are paid from the city treasury first, then your purse. Upgrades continue while you are away.</p>
       ${b.mine ? `<p class="flavor">Under the encomienda and the mita, the people of ${st.name} are forced to dig in the mines. ${fmt(Game.s.stats.labourDeaths)} have died in forced labour across your colonies.</p>` : ''}`;
     this.dialog(`🏰 ${st.name}`, html, [['Leave', () => this.close()]], false, act);
+    this.townOpen = true;
   },
 
   // ------------------------------------------------------------ Sevilla
@@ -365,7 +368,24 @@ const UI = {
         <div class="shop-row"><span class="lbl">🔧 Repair the ${sh.name} <small>hull ${s.hull}/${sh.hull}</small></span><button data-act="repair" ${s.hull < sh.hull && Game.canAfford(PRICES.repair) ? '' : 'disabled'}>Repair (${fmt(repairCost)})</button></div>
         ${shipRows}<div class="small">Your current ship is traded in for half its value.</div></div>`;
     this.dialog('🏰 Sevilla', html, [['🎖️ Retire', actions.retire], ['Set sail', () => { Game.save(true); this.close(); }]], false, actions);
+    this.townOpen = true;
     this.refresh();
+  },
+
+  soundDialog() {
+    Sound.init();
+    const st = Sound.settings;
+    const row = (k, label) => `<div class="shop-row"><label class="lbl" for="vol-${k}">${label}</label><input id="vol-${k}" type="range" min="0" max="100" value="${Math.round(st[k] * 100)}"><span class="have" id="vol-${k}-v">${Math.round(st[k] * 100)}%</span></div>`;
+    const html = `<p class="sub">All music and sound are composed and synthesised live in your browser.</p>
+      ${row('music', '🎵 Music')}${row('sfx', '💥 Effects')}${row('amb', '🌊 Ambience (waves, wind, jungle)')}
+      <div class="shop-row"><label class="lbl" for="vol-mute">🔇 Mute everything</label><input id="vol-mute" type="checkbox" ${st.muted ? 'checked' : ''}></div>
+      <p class="small">The music follows the game: a rolling theme at sea, a lighter one on land, war drums in battle, and La Folía in Sevilla and your colonies.</p>`;
+    this.dialog('🔊 Sound', html, [['Close', () => this.close()]]);
+    for (const k of ['music', 'sfx', 'amb']) {
+      const el = document.getElementById(`vol-${k}`);
+      el.addEventListener('input', () => { Sound.setSetting(k, el.value / 100); document.getElementById(`vol-${k}-v`).textContent = `${el.value}%`; });
+    }
+    document.getElementById('vol-mute').addEventListener('change', (e) => Sound.setSetting('muted', e.target.checked));
   },
 
   careen() {

@@ -147,3 +147,5 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .why { color: #8a4a2a; font-style: italic; }
 .svc { display: flex; flex-wrap: wrap; gap: 6px; }
 @media (max-width: 800px) { .q-item { grid-template-columns: 1fr; } }
+#modal input[type="range"] { accent-color: var(--red); width: 140px; }
+#modal input[type="checkbox"] { accent-color: var(--red); width: 18px; height: 18px; }

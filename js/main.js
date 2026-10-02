@@ -768,7 +768,7 @@ const Input = {
     const unit = Game.active();
     const fx = unit.x, fy = unit.y, onLand = !!Game.s.party;
     const ok = Game.step(next.x, next.y);
-    if (unit.x !== fx || unit.y !== fy) this.anim = { unit, fx, fy, t: 0, dur: onLand ? 0.17 : 0.1 };
+    if (unit.x !== fx || unit.y !== fy) { this.anim = { unit, fx, fy, t: 0, dur: onLand ? 0.17 : 0.1 }; Sound.moved(onLand, Game.s.horses); }
     if (!ok) { this.path = []; this.pending = null; }
     else if (!this.path.length && this.pending) this.runPending();
     UI.refresh();
@@ -777,6 +777,13 @@ const Input = {
 
 // ---------------------------------------------------------------------------
 const Main = {
+  scene() {
+    const s = Game.s;
+    if (!s || s.over) return 'title';
+    if (Battle.B && !Battle.B.done && UI.open) return 'battle';
+    if (UI.open && UI.townOpen) return 'town';
+    return s.party ? 'land' : 'sea';
+  },
   start(loaded) {
     $('#title-screen').classList.add('hidden');
     $('#game-ui').classList.remove('hidden');
@@ -796,11 +803,16 @@ const Main = {
       const dt = Math.min(0.1, (t - last) / 1000); last = t;
       Input.update(dt);
       Render.frame(dt);
+      Sound.update(dt, Main.scene());
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
   },
 };
+
+// browsers only allow audio after the player interacts with the page
+['pointerdown', 'keydown'].forEach((ev) => document.addEventListener(ev, () => Sound.init(), { capture: true }));
+document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('button')) Sound.play('click'); });
 
 window.addEventListener('load', () => {
   setTimeout(() => {

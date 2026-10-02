@@ -126,6 +126,7 @@ const Game = {
   onLand() { return !!this.s.party; },
   log(msg, cls = '') {
     this.s.log.push({ msg, cls });
+    Sound.onLog(msg, cls);
     if (this.s.log.length > 120) this.s.log.shift();
     UI.addLog(msg, cls);
   },
@@ -355,6 +356,7 @@ const Game = {
     const s = this.s;
     if (!World.landOK(x, y)) return false;
     s.party = { x, y, dir: s.ship.dir };
+    Sound.play('splash');
     this.reveal(x, y, 4);
     this.log(`Your expedition lands ${TERRAIN[World.t(x, y)].name.toLowerCase() === 'river' ? 'on the river bank' : 'in the ' + TERRAIN[World.t(x, y)].name.toLowerCase()}.`, '');
     this.checkDiscoveries(x, y);
@@ -365,6 +367,7 @@ const Game = {
     const s = this.s;
     if (!s.party) return;
     s.party = null;
+    Sound.play('splash');
     if (s.allies > 0) { this.log(`Your ${fmt(s.allies)} native allies return to their homes.`, ''); s.allies = 0; }
     const room = this.ship().men - s.soldiers;
     if (s.auxiliaries > room) {
@@ -763,6 +766,7 @@ const Game = {
   gameOver(cause, text) {
     if (this.s.over) return;
     this.s.over = true;
+    Sound.play('gameover');
     this.log(text, 'bad');
     UI.endScreen(cause, text, false);
     try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ }
