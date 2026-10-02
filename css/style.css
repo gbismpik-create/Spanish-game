@@ -219,3 +219,42 @@ button { touch-action: manipulation; }
 @media (max-width: 800px) { .q-item { grid-template-columns: 1fr; } }
 #modal input[type="range"] { accent-color: var(--red); width: 140px; }
 #modal input[type="checkbox"] { accent-color: var(--red); width: 18px; height: 18px; }
+
+/* battle force tables */
+.ic-arq { width: 1.75em; height: 0.85em; vertical-align: -0.1em; }
+.forces h4 small { font-weight: normal; color: #6a5035; font-size: 12px; }
+.frow { display: grid; grid-template-columns: 1.6em 1fr auto 3.4em; grid-template-rows: auto auto; column-gap: 6px; align-items: center; padding: 2px 0; font-variant-numeric: tabular-nums; }
+.frow.gone { opacity: 0.45; }
+.frow .fi { text-align: center; }
+.frow .fl { min-width: 0; }
+.frow .fn { text-align: right; }
+.frow .fn small { color: #6a5035; }
+.frow .fbar { grid-column: 2 / 5; height: 5px; background: rgba(0, 0, 0, 0.12); border-radius: 3px; overflow: hidden; }
+.frow .fbar.empty { background: none; }
+.frow .fbar i { display: block; height: 100%; transition: width 0.5s; }
+.delta { text-align: right; font-weight: bold; font-size: 13px; }
+.delta.down { color: #b02a1f; animation: deltaflash 1.2s ease-out; }
+.delta.up { color: #1f7a30; animation: deltaflash 1.2s ease-out; }
+@keyframes deltaflash { 0% { background: rgba(255, 215, 106, 0.9); border-radius: 4px; } 100% { background: transparent; } }
+.balance { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; font-weight: bold; font-size: 13px; margin-top: 4px; }
+.bl-us { color: #8a6a10; } .bl-them { color: #b02a1f; }
+.bl-bar { height: 12px; background: #b5403a; border-radius: 6px; overflow: hidden; border: 1px solid rgba(0, 0, 0, 0.25); }
+.bl-bar i { display: block; height: 100%; background: linear-gradient(90deg, #a8841c, #e2bd3c); transition: width 0.6s; }
+.bl-verdict { text-align: center; font-style: italic; font-size: 13px; color: #5a3a1a; margin: 2px 0 6px; }
+.round-sum { background: rgba(201, 162, 39, 0.18); border-left: 4px solid #c9a227; padding: 5px 9px; border-radius: 4px; font-size: 13.5px; margin: 0 0 8px; }
+@media (max-width: 800px), (max-height: 500px) {
+  /* narrow tables: the change sits under the count, beside the bar */
+  .frow { grid-template-columns: 1.4em 1fr auto; column-gap: 4px; font-size: 12px; }
+  .frow .fbar { grid-column: 2 / 3; grid-row: 2; }
+  .frow .delta { grid-column: 3; grid-row: 2; line-height: 1.1; }
+  .frow .fl small { display: none; }
+  .delta { font-size: 11.5px; }
+  .round-sum { font-size: 12.5px; padding: 4px 7px; margin-bottom: 4px; }
+  .bl-verdict { margin: 1px 0 4px; font-size: 12px; }
+}
+@media (max-height: 500px) {
+  .bf-note { display: none; }
+  .battle .side.forces { font-size: 12px; }
+  .frow { padding: 0; }
+  .frow .fbar { height: 3px; }
+}

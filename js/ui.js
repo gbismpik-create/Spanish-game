@@ -50,7 +50,7 @@ const UI = {
       ['🪙', fmt(s.treasure), 'Treasure carried (gold & silver). Deliver to Sevilla for fame.'],
       ['⚔️', s.soldiers, `Soldiers (ship holds ${sh.men})`],
       ['🐎', s.horses, 'Horses', 1],
-      ['🔫', s.arquebuses, 'Arquebuses', 1],
+      [ICON_ARQ, s.arquebuses, 'Arquebuses (matchlock guns)', 1],
       ['💣', s.cannons, `Cannon (max ${sh.cannons})`, 1],
       ['🏹', fmt(s.allies), 'Native allies (leave when you re-embark)', 1],
       ['🪶', fmt(s.auxiliaries), 'Native auxiliaries in your service (paid monthly, sail with you)', 1],
@@ -370,7 +370,7 @@ const UI = {
       <div class="section"><h3>Recruit & Arm</h3>
         ${row('⚔️ Soldiers', 'soldiers', prices.soldiers, opts.soldiers, caps.soldiers, `ship holds ${sh.men}`)}
         ${row('🐎 Horses', 'horses', prices.horses, opts.horses, caps.horses, 'max ¼ of ship berths')}
-        ${row('🔫 Arquebuses', 'arquebuses', prices.arquebuses, opts.arquebuses, caps.arquebuses, 'one per soldier')}
+        ${row(`${ICON_ARQ} Arquebuses`, 'arquebuses', prices.arquebuses, opts.arquebuses, caps.arquebuses, 'one per soldier')}
         ${row('💣 Cannon', 'cannons', prices.cannons, opts.cannons, caps.cannons, `max ${sh.cannons}`)}</div>
       <div class="section"><h3>The Church</h3>
         ${row(Game.year() >= 1540 ? '✝️ Friars & Jesuit fathers' : '✝️ Franciscan & Dominican friars', 'priests', prices.priests, opts.priests, caps.priests, 'max 10 · they preach, baptise and tend the wounded')}</div>

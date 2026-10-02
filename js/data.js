@@ -370,3 +370,14 @@ const BUILDINGS = {
 };
 const BUILD_COST_MULT = [1, 2, 4, 7, 12];
 const BUILD_DAYS_MULT = [1, 1.5, 2, 3, 4];
+
+// A matchlock arquebus, drawn as inline SVG: there is no emoji for one, and
+// the pistol emoji renders as a modern water gun on most phones.
+const ICON_ARQ = '<svg class="ic-arq" viewBox="0 0 34 14" aria-hidden="true">'
+  + '<path d="M1 9.5 Q1 6.5 4 6.5 L22 5.6 L22 8.2 L13 9 Q9 9.4 7 12.2 Q4 13.4 2 12.4 Z" fill="#8a5a2e" stroke="#4a2e14" stroke-width="0.6"/>'
+  + '<rect x="11" y="4.3" width="22.5" height="1.7" rx="0.5" fill="#55585e" stroke="#2a2a2a" stroke-width="0.4"/>'
+  + '<rect x="32" y="3.9" width="1.6" height="2.5" fill="#3a3a3a"/>'
+  + '<path d="M13.5 9 q1.5 1.8 -0.2 3.4 q-1.2 0.9 -0.4 2" fill="none" stroke="#c9a227" stroke-width="0.9"/>'
+  + '<path d="M13.6 6 q-1.6 -2 0.4 -3.6" fill="none" stroke="#c9a227" stroke-width="0.9"/>'
+  + '<circle cx="14.1" cy="2.4" r="0.9" fill="#ff7a2a"/>'
+  + '</svg>';

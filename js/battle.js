@@ -71,6 +71,8 @@ const Battle = {
       round: 0, kills: 0, lost: 0, captured: 0, wounded: 0, alliesLost: 0, horsesLost: 0,
       chiefDown: false, lines: [], done: false, lastTactic: null,
     };
+    Object.assign(this.B, { H0: s.horses, A0: s.arquebuses, C0: s.cannons, X0: s.auxiliaries, M0: this.B.morale });
+    this.B.prev = this.snap();
     s.stats.battles++;
     s.cultures[opts.culture].met = true;
     Sound.play('warcry'); Sound.play('drum');
@@ -120,6 +122,7 @@ const Battle = {
   round(tactic) {
     const s = Game.s, B = this.B, g = B.ground, sty = B.style;
     if (B.done) return;
+    B.prev = this.snap();
     B.round++;
     const repeatVolley = tactic === 'volley' && B.lastTactic === 'volley';
     B.lastTactic = tactic;
@@ -180,6 +183,26 @@ const Battle = {
     this.render();
   },
 
+  snap() {
+    const s = Game.s, B = this.B;
+    return { soldiers: s.soldiers, wounded: B.wounded, horses: s.horses, arquebuses: s.arquebuses, cannons: s.cannons, allies: s.allies, auxiliaries: s.auxiliaries, W: B.W, morale: Math.max(0, B.morale) };
+  },
+
+  // current strength of each side, for the balance-of-power bar
+  balance() {
+    const s = Game.s, B = this.B, g = B.ground;
+    // estimate how many rounds each side can last with its best tactic
+    const S = s.soldiers, H = s.horses, C = s.cannons, L = s.allies + s.auxiliaries, A = Math.min(s.arquebuses, S);
+    const fatigue = Math.max(0.6, 1 - 0.07 * B.round);
+    const dmg = fatigue * Math.max(S * 0.3 + A * g.arq + C * 6 + L * 0.25, S * 0.5 + H * 2.5 * g.cav * (B.style.chargeMult || 1) + L * 0.3, S * 0.8 + H * 0.8 * g.cav + A * 0.3 + L * 0.35);
+    const shock = 18 * s.cultures[B.culture].shock;
+    const theirRounds = Math.min(Math.max(0, B.morale) / Math.max(0.1, (dmg / B.W0) * 250 + shock), B.W / Math.max(1, dmg));
+    const pts = B.W * 0.03 * B.cul.t * B.defense * g.enemy;
+    const hits = (L > 0 ? pts * 0.3 : pts) * 0.3;
+    const ourRounds = Math.max(0, S - 0.3 * B.S0) / Math.max(0.05, hits);
+    return ourRounds / Math.max(0.01, ourRounds + theirRounds);
+  },
+
   retreat() {
     const B = this.B;
     const { dead } = this.enemyStrike(0.6);
@@ -236,30 +259,61 @@ const Battle = {
 
   render() {
     const s = Game.s, B = this.B;
-    const mor = clamp(B.morale, 0, 120);
+    const now = this.snap(), prev = B.prev || now;
     const fatigue = Math.round(Math.max(0.6, 1 - 0.07 * B.round) * 100);
+    const d = (k) => now[k] - prev[k];
+    // green when the change is good for you, red when it is bad
+    const delta = (v, goodUp) => (v ? `<span class="delta ${(v > 0) === goodUp ? 'up' : 'down'}">${v > 0 ? '+' : '−'}${fmt(Math.abs(v))}</span>` : '<span class="delta"></span>');
+    const row = (icon, label, cur, start, dv, color, opts = {}) => `
+      <div class="frow${cur === 0 && !opts.keep ? ' gone' : ''}">
+        <span class="fi">${icon}</span><span class="fl">${label}</span>
+        <span class="fn"><b>${fmt(cur)}</b>${start != null ? `<small> / ${fmt(start)}</small>` : ''}</span>
+        ${delta(dv, opts.goodUp !== false)}
+        ${start != null ? `<span class="fbar"><i style="width:${Math.min(100, (cur / Math.max(1, start)) * 100)}%;background:${color}"></i></span>` : '<span class="fbar empty"></span>'}
+      </div>`;
+    const gold = '#c9a227', red = '#b5403a';
+    const ours = `
+      ${row('⚔️', 'Soldiers', s.soldiers, B.S0, d('soldiers'), gold, { keep: true })}
+      ${B.wounded ? row('🩹', 'Wounded <small>(out of the fight)</small>', B.wounded, null, d('wounded'), gold, { goodUp: false }) : ''}
+      ${B.H0 ? row('🐎', 'Horses', s.horses, B.H0, d('horses'), gold, { keep: true }) : ''}
+      ${B.A0 ? row(ICON_ARQ, 'Arquebuses', s.arquebuses, B.A0, d('arquebuses'), gold, { keep: true }) : ''}
+      ${B.C0 ? row('💣', 'Cannon', s.cannons, B.C0, d('cannons'), gold, { keep: true }) : ''}
+      ${B.L0 ? row('🏹', 'Allies', s.allies, B.L0, d('allies'), gold, { keep: true }) : ''}
+      ${B.X0 ? row('🪶', 'Auxiliaries', s.auxiliaries, B.X0, d('auxiliaries'), gold, { keep: true }) : ''}`;
+    const morPct = Math.round((now.morale / B.M0) * 100);
+    const theirs = `
+      ${row('🏹', 'Warriors', B.W, B.W0, d('W'), red, { keep: true, goodUp: false })}
+      <div class="frow"><span class="fi">💢</span><span class="fl">Morale</span><span class="fn"><b>${morPct}%</b></span>${delta(Math.round((d('morale') / B.M0) * 100), false)}<span class="fbar"><i style="width:${Math.min(100, morPct)}%;background:${red}"></i></span></div>
+      <div class="frow"><span class="fi">😨</span><span class="fl">Fear <small>of horses & guns</small></span><span class="fn"><b>${Math.round(s.cultures[B.culture].shock * 100)}%</b></span><span class="delta"></span><span class="fbar empty"></span></div>`;
+    // balance of power
+    const bal = this.balance();
+    const verdict = bal > 0.7 ? 'Your captains are confident.' : bal > 0.55 ? 'The advantage is yours.' : bal > 0.45 ? 'The battle hangs in the balance.' : bal > 0.3 ? 'The battle is turning against you.' : 'Your men are close to breaking.';
+    // this round in one line
+    let summary = '';
+    if (B.round > 0 || B.ambush) {
+      const lost = [];
+      const sl = -d('soldiers') - d('wounded');
+      if (sl > 0) lost.push(`${sl} soldier${sl === 1 ? '' : 's'}`);
+      if (d('horses') < 0) lost.push(`${-d('horses')} horse${d('horses') === -1 ? '' : 's'}`);
+      if (d('allies') < 0) lost.push(`${fmt(-d('allies'))} allies`);
+      if (d('auxiliaries') < 0) lost.push(`${fmt(-d('auxiliaries'))} auxiliaries`);
+      const wd = d('wounded');
+      summary = `<div class="round-sum"><b>${B.round ? `Round ${B.round}` : 'Ambush'}:</b> you lost ${lost.length ? lost.join(', ') : 'no one'}${wd > 0 ? ` (${wd} more wounded)` : ''}; the enemy lost <b>${fmt(-d('W'))}</b> warriors and <b>${Math.round((-d('morale') / B.M0) * 100)}%</b> morale.</div>`;
+    }
     const html = `
-      <p class="small"><b>Battlefield: ${B.ground.name}.</b> ${B.ground.note}</p>
+      <p class="small bf-note"><b>Battlefield: ${B.ground.name}.</b> ${B.ground.note} <i>${B.style.note}</i></p>
+      <div class="balance" title="Balance of power">
+        <span class="bl-us">You</span>
+        <div class="bl-bar"><i style="width:${Math.round(bal * 100)}%"></i></div>
+        <span class="bl-them">${B.cul.name.split(' (')[0]}</span>
+      </div>
+      <div class="bl-verdict">${verdict}</div>
       <div class="battle">
-        <div class="side">
-          <h4>Your expedition</h4>
-          <div>⚔️ Soldiers: <b>${s.soldiers}</b> / ${B.S0}${B.wounded ? ` <span class="small">(${B.wounded} wounded out of the fight)</span>` : ''}</div>
-          <div>🐎 Horses: <b>${s.horses}</b> · 🔫 Arquebuses: <b>${s.arquebuses}</b> · 💣 Cannon: <b>${s.cannons}</b></div>
-          <div>🏹 Native allies: <b>${fmt(s.allies)}</b> · 🪶 Auxiliaries: <b>${fmt(s.auxiliaries)}</b></div>
-          <div class="bar"><div style="width:${(s.soldiers / Math.max(1, B.S0)) * 100}%;background:#c9a227"></div></div>
-          <div class="small">Strength of your men: ${fatigue}%</div>
-        </div>
-        <div class="vs">VS</div>
-        <div class="side">
-          <h4>${B.cul.name}</h4>
-          <div>Warriors: <b>${fmt(B.W)}</b> / ${fmt(B.W0)}</div>
-          <div>Morale</div>
-          <div class="bar"><div style="width:${(mor / 120) * 100}%;background:#b5403a"></div></div>
-          <div class="small">Fear of horses & guns: ${Math.round(s.cultures[B.culture].shock * 100)}%</div>
-          <div class="small"><i>${B.style.note}</i></div>
-        </div>
+        <div class="side forces"><h4>Your expedition <small>· strength ${fatigue}%</small></h4>${ours}</div>
+        <div class="side forces enemy"><h4>${B.cul.name}</h4>${theirs}</div>
       </div>
       <div class="battle-log">${B.lines.slice(-8).map((l) => `<p>${l}</p>`).join('') || '<p><i>The two forces face each other. Choose your tactic.</i></p>'}</div>
+      ${summary}
       <div class="tactics">${Object.entries(TACTICS).map(([k, t]) => `<button class="tactic" data-t="${k}" title="${t.desc}"><span>${t.icon}</span>${t.name}<small>${t.desc}</small></button>`).join('')}</div>`;
     UI.dialog(`⚔️ ${B.title}`, html, [['🏳️ Retreat', () => this.retreat()]], true);
     document.querySelectorAll('.tactic').forEach((b) => b.addEventListener('click', () => this.round(b.dataset.t)));
