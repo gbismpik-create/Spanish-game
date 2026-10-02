@@ -250,6 +250,9 @@ const Render = {
       };
       hut(-5, 1, 0.85); hut(5, 2, 0.8); hut(0, -2, 1);
     }
+    if (st.converted >= 50) {
+      c.fillStyle = '#fff4dc'; c.fillRect(-11, -12, 2, 8); c.fillRect(-13, -10, 6, 2);
+    }
     if (st.infection) {
       c.fillStyle = '#8a3cc8'; c.beginPath(); c.arc(9, -8, 3.5, 0, 7); c.fill();
       c.fillStyle = '#fff'; c.font = 'bold 6px sans-serif'; c.textAlign = 'center'; c.fillText('☠', 9, -6);
@@ -305,6 +308,7 @@ const Input = {
       Render.free = false;
     } else if (k === ' ') { e.preventDefault(); Render.free = false; }
     else if (k === 'l') this.landOrEmbark();
+    else if (k === 'f') Game.forage();
     else if (k === '+' || k === '=') Render.zoomBy(1.25);
     else if (k === '-') Render.zoomBy(0.8);
   },
@@ -321,6 +325,7 @@ const Input = {
       const st = site.ref;
       const [l, cls] = Game.relLabel(Game.s.cultures[st.culture].rel);
       html += st.conquered ? `<br>⛪ <b>${st.name}</b> — Spanish colony` : `<br><b>${st.name}</b> — ${SETTLEMENT_TYPES[st.type].label}, ${CULTURES[st.culture].name}<br>Pop. ${fmt(st.pop)} · <span class="${cls}">${l}</span>`;
+      if (st.converted > 0) html += `<br>✝️ ${st.converted}% Christian${st.converted >= 50 ? ' (mission)' : ''}`;
       if (st.infection) html += `<br><span class="disease">☠ ${DISEASES.find((d) => d.id === st.infection.d).name} epidemic</span>`;
     } else if (site && site.kind === 'ruin') html += `<br>🏛️ <b>${site.ref.name}</b>${site.ref.explored ? ' (searched)' : ' — unexplored ruins'}`;
     else if (site && site.kind === 'port') html += '<br>🏰 <b>Sevilla</b> — home port. Sail next to it to trade and recruit.';
@@ -449,7 +454,7 @@ const Main = {
     UI.refresh();
     if (!loaded) {
       UI.dialog('⚓ Sevilla, August 1492', `<p class="flavor">Their Catholic Majesties have granted you a royal charter to sail west across the Ocean Sea. Some say you will reach the Indies. Others say you will fall off the edge of the world.</p>
-        <p>You command a <b>caravel</b> with <b>40 soldiers</b>, 4 horses, 10 arquebuses and a cannon. Sail west with the trade winds, discover new lands, seek out ancient ruins, and win fame for yourself and the Crown before the century is out.</p>
+        <p>You command a <b>caravel</b> with <b>40 soldiers</b>, 4 horses, 10 arquebuses, a cannon and a Franciscan friar. Sail west with the trade winds, discover new lands, seek out ancient ruins, and win fame for yourself and the Crown before the century is out.</p>
         <p class="small">Click the map to sail. Click land to send an expedition ashore. Sail next to the castle of Sevilla to trade and recruit. Press ❓ for help.</p>`,
       [['Visit the Casa de Contratación first', () => UI.portDialog()], ['Set sail!', () => UI.close()]]);
     }

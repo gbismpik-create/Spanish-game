@@ -17,6 +17,8 @@ const TERRAIN = {
   15: { name: 'Mountains', color: [138, 124, 106], cost: 4.5 },
   16: { name: 'Steppe', color: [180, 170, 122], cost: 1.5 },
 };
+// share of daily food needs found by living off the land in each terrain
+const FORAGE = { 2: 0.8, 10: 0.6, 11: 0.65, 12: 0.45, 13: 0.08, 14: 0.6, 15: 0.15, 16: 0.5 };
 const TP = 8; // pixels per tile in the pre-rendered terrain image
 const DIRS8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 

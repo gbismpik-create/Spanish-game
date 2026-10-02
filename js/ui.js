@@ -14,6 +14,7 @@ const UI = {
     $('#btn-codex').addEventListener('click', () => this.codex());
     $('#btn-disc').addEventListener('click', () => this.discoveriesDialog());
     $('#btn-careen').addEventListener('click', () => this.careen());
+    $('#btn-forage').addEventListener('click', () => Game.forage());
     $('#btn-help').addEventListener('click', () => this.help());
     $('#btn-save').addEventListener('click', () => Game.save(false));
     $('#btn-zin').addEventListener('click', () => Render.zoomBy(1.25));
@@ -38,6 +39,7 @@ const UI = {
       ['🔫', s.arquebuses, 'Arquebuses'],
       ['💣', s.cannons, `Cannon (max ${sh.cannons})`],
       ['🏹', fmt(s.allies), 'Native allies (leave when you re-embark)'],
+      ['✝️', s.priests, 'Friars: send them to preach in native towns and colonies'],
       ['🍖', `${fmt(s.food)}`, `Provisions (${Math.floor(s.food / (1 + s.soldiers / 20 + s.allies / 40))} days)`],
       ['📦', s.goods, 'Trade goods: beads, cloth, iron tools'],
       ['⚓', `${s.hull}/${sh.hull}`, `${sh.name} hull`],
@@ -47,6 +49,7 @@ const UI = {
       + `<div class="hud-item wind" title="Wind at your latitude">🌬️ ${wind.name} ${wind.dir < 0 ? '←' : wind.dir > 0 ? '→' : '·'}</div>`;
     $('#btn-land').textContent = s.party ? '⛵ Embark' : '🚣 Land';
     $('#btn-careen').style.display = (!s.party && s.hull < sh.hull * 0.6) ? '' : 'none';
+    $('#btn-forage').style.display = s.party ? '' : 'none';
     $('#mode').textContent = s.party ? 'Expedition on land — click to march, click the ship to re-embark' : 'At sea — click to sail, click land to send an expedition ashore';
   },
 
@@ -119,6 +122,7 @@ const UI = {
       <div class="stats">
         <div>Population: <b>${fmt(st.pop)}</b></div><div>Warriors: <b>~${fmt(Math.round(W / 50) * 50 || W)}</b></div>
         <div>Attitude: <b class="${rc}">${rl}</b> (${Math.round(cs.rel)})</div><div>Rumoured: <b>${wealth}</b></div>
+        <div>Christians: <b>${st.converted}%</b>${st.converted >= 50 ? ' ✝️ mission' : ''}</div><div>Your friars: <b>${s.priests}</b></div>
       </div>
       ${dis}
       <p class="odds">${odds}</p>
@@ -150,12 +154,24 @@ const UI = {
       st.gold -= g; s.treasure += g; Game.changeRel(st.culture, 4);
       Game.log(`Traded 10 goods at ${st.name} for ${g} in gold.`, 'good'); enc();
     }, s.goods < 10 || cs.rel < -20 || st.gold <= 0, 'Requires 10 trade goods and a non-hostile attitude']);
-    actions.push(['🌽 Trade for provisions', () => {
-      s.goods -= 5;
-      const f = Math.min(Game.ship().food - s.food, randi(50, 90));
-      s.food += Math.max(0, f); Game.changeRel(st.culture, 2);
-      Game.log(`Traded 5 goods at ${st.name} for ${Math.max(0, f)} provisions of maize, cassava and fish.`, 'good'); enc();
-    }, s.goods < 5 || cs.rel < -20 || s.food >= Game.ship().food]);
+    const mission = st.converted >= 50;
+    actions.push(['🌽 Trade for provisions (3 goods)', () => {
+      s.goods -= 3;
+      const f = Game.addFood(randi(90, 150) * (mission ? 1.5 : 1));
+      Game.changeRel(st.culture, 2);
+      Game.log(`Traded 3 goods at ${st.name} for ${f} provisions of maize, cassava and fish.`, 'good'); enc();
+    }, s.goods < 3 || cs.rel < -20 || s.food >= Game.ship().food]);
+    actions.push(['🍞 Ask for food', () => {
+      const f = Game.addFood(randi(50, 100) * (mission ? 1.5 : 1));
+      st.foodReadyDay = s.day + 60;
+      Game.log(`The people of ${st.name} share their food with you: +${f} provisions.`, 'good'); enc();
+    }, cs.rel < (mission ? 0 : 20) || s.day < st.foodReadyDay || s.food >= Game.ship().food, 'Requires a Neutral-to-Friendly attitude (20+); once every two months']);
+    actions.push([`✝️ Send friars to preach`, () => {
+      const html = Game.preach(st);
+      if (html === null) return;
+      if (Game.s.over) return;
+      this.dialog(`✝️ ${st.name}`, html, [['Continue', () => this.encounterDialog(st)]]);
+    }, s.priests <= 0 || cs.rel < -20 || st.converted >= 100, s.priests <= 0 ? 'Hire friars in Sevilla' : 'Takes 10 days. Requires an attitude above -20']);
     const allyReady = s.day >= st.allyReadyDay;
     const hasEnemy = c.rivals.length > 0;
     actions.push(['🏹 Ask for warriors', () => {
@@ -163,7 +179,7 @@ const UI = {
       s.allies += n; st.allyReadyDay = s.day + 365;
       Game.log(`${fmt(n)} ${c.name} warriors join your expedition${hasEnemy && c.rivals.length ? ', eager to fight their old enemies' : ''}.`, 'good');
       enc();
-    }, cs.rel < 40 || !allyReady || !s.party, !s.party ? 'Allies only march with an expedition on land' : 'Requires Friendly attitude (40+), once per year']);
+    }, cs.rel < (mission ? 20 : 40) || !allyReady || !s.party, !s.party ? 'Allies only march with an expedition on land' : 'Requires Friendly attitude (40+, or 20+ with a mission), once per year']);
     actions.push(['📜 Demand tribute', () => {
       const p = clamp(ratio - 0.3, 0.05, 0.95);
       if (Math.random() < p) {
@@ -192,12 +208,18 @@ const UI = {
     const sh = Game.ship();
     const html = `<p class="sub">Spanish colony · formerly a ${SETTLEMENT_TYPES[st.type].label.toLowerCase()} of the ${CULTURES[st.culture].name}</p>
       <div class="stats"><div>Population: <b>${fmt(st.pop)}</b></div><div>Tribute collected: <b>${fmt(st.treasury)}</b></div>
-      <div>Settlers willing to join: <b>${st.recruits}</b></div><div>Port: <b>${coastal ? 'yes' : 'no'}</b></div></div>
+      <div>Settlers willing to join: <b>${st.recruits}</b></div><div>Port: <b>${coastal ? 'yes' : 'no'}</b></div>
+      <div>Christians: <b>${st.converted}%</b>${st.converted >= 50 ? ' ✝️ mission (+25% tribute)' : ''}</div><div>Your friars: <b>${s.priests}</b></div></div>
       <p class="flavor">Encomenderos force the native people to labour in fields and mines. The friars complain to the Crown.</p>`;
     const re = () => this.colonyDialog(st, fromShip);
     const actions = [
       [`🪙 Collect tribute (${fmt(st.treasury)})`, () => { s.treasure += st.treasury; Game.log(`Collected ${fmt(st.treasury)} tribute at ${st.name}.`, 'good'); st.treasury = 0; re(); }, st.treasury <= 0],
-      ['🍖 Buy 100 provisions (150)', () => { if (Game.spend(150)) s.food = Math.min(sh.food, s.food + 100); re(); }, !Game.canAfford(150) || s.food >= sh.food],
+      ['🍖 Buy 150 provisions (80)', () => { if (Game.spend(80)) Game.addFood(150); re(); }, !Game.canAfford(80) || s.food >= sh.food],
+      ['✝️ Send friars to preach', () => {
+        const html = Game.preach(st);
+        if (html === null || Game.s.over) return;
+        this.dialog(`✝️ ${st.name}`, html, [['Continue', re]]);
+      }, s.priests <= 0 || st.converted >= 100, 'Takes 10 days'],
       [`⚔️ Recruit 5 settlers (175)`, () => { if (Game.spend(175)) { s.soldiers += 5; st.recruits -= 5; } re(); }, st.recruits < 5 || !Game.canAfford(175) || s.soldiers + 5 > sh.men],
       ['🔧 Repair ship (3/pt)', () => {
         const need = sh.hull - s.hull; const afford = Math.floor((s.ducats + s.treasure) / 3);
@@ -226,11 +248,12 @@ const UI = {
       horses: Math.min(Math.floor(sh.men / 4), s.soldiers) - s.horses,
       arquebuses: s.soldiers - s.arquebuses,
       cannons: sh.cannons - s.cannons,
+      priests: 10 - s.priests,
       food: sh.food - s.food,
       goods: 200 - s.goods,
     };
-    const prices = { soldiers: PRICES.soldier, horses: PRICES.horse, arquebuses: PRICES.arquebus, cannons: PRICES.cannon, food: PRICES.food, goods: PRICES.goods };
-    const opts = { soldiers: [5, 20], horses: [1, 5], arquebuses: [5, 20], cannons: [1], food: [100, 9999], goods: [20, 9999] };
+    const prices = { priests: PRICES.priest, soldiers: PRICES.soldier, horses: PRICES.horse, arquebuses: PRICES.arquebus, cannons: PRICES.cannon, food: PRICES.food, goods: PRICES.goods };
+    const opts = { priests: [1, 3], soldiers: [5, 20], horses: [1, 5], arquebuses: [5, 20], cannons: [1], food: [100, 9999], goods: [20, 9999] };
     const actions = {};
     for (const [w, list] of Object.entries(opts)) for (const n of list) actions[`${w}-${n}`] = () => buy(w, n === 9999 ? Math.floor((s.ducats + s.treasure) / prices[w]) : n, prices[w], caps[w]);
     const repairCost = (sh.hull - s.hull) * PRICES.repair;
@@ -258,6 +281,8 @@ const UI = {
         ${row('🐎 Horses', 'horses', prices.horses, opts.horses, caps.horses, 'max ¼ of ship berths')}
         ${row('🔫 Arquebuses', 'arquebuses', prices.arquebuses, opts.arquebuses, caps.arquebuses, 'one per soldier')}
         ${row('💣 Cannon', 'cannons', prices.cannons, opts.cannons, caps.cannons, `max ${sh.cannons}`)}</div>
+      <div class="section"><h3>The Church</h3>
+        ${row(Game.year() >= 1540 ? '✝️ Friars & Jesuit fathers' : '✝️ Franciscan & Dominican friars', 'priests', prices.priests, opts.priests, caps.priests, 'max 10 · they preach, baptise and tend the wounded')}</div>
       <div class="section"><h3>Market</h3>
         ${row('🍖 Provisions', 'food', prices.food, opts.food, caps.food, `hold ${sh.food}`)}
         ${row('📦 Trade goods', 'goods', prices.goods, opts.goods, caps.goods, 'max 200')}</div>
@@ -320,7 +345,15 @@ const UI = {
       <li><b>Disease</b>: your men unknowingly carry smallpox, measles and typhus. Epidemics spread from town to town ahead of you, killing a large share of the population. This was the deadliest force of the conquest.</li></ul>
       <h3>Battle</h3>
       <ul><li>Choose a tactic each round. Guns and horses cause panic among peoples who have never seen them, but each battle teaches them to fight back.</li>
-      <li>Conquered settlements become colonies that pay tribute.</li></ul>
+      <li>Conquered settlements become colonies that pay tribute.</li>
+      <li>Battles depend on the ground: horses rule open plains but flounder in jungle and mountains, and rain fouls powder. Your men tire as a fight drags on. Wounded men may recover afterwards. Each people fights its own way: Aztecs take captives, Inca slingers strike from afar, Caribs use poisoned arrows, and Mapuche pikemen stop cavalry.</li></ul>
+      <h3>Food</h3>
+      <ul><li>Your crew fishes in coastal waters and rivers, and your expedition lives partly off the land as it marches. Grassland, forest and rivers are rich; deserts and mountains are poor.</li>
+      <li>Press <b>🌿 Forage</b> (or F) on land to spend five days hunting and gathering.</li>
+      <li>Friendly peoples greet you with food, share it when asked, and trade generously for a few trade goods. Conquered granaries and colonies also feed you.</li></ul>
+      <h3>Friars</h3>
+      <ul><li>Hire friars in Sevilla and send them to preach in native towns and in your colonies. Each mission takes ten days. Above 50% Christian, a town gets a mission church: it trades and shares food more generously, provides allies more readily, and as a colony pays more tribute. Friars also tend your wounded after battle.</li>
+      <li>Preaching among peoples who distrust you is dangerous, and a friar may be killed.</li></ul>
       <h3>Fame</h3>
       <p>Fame comes from discoveries, artifacts, conquests and the royal fifth of treasure delivered to Sevilla. Titles: Hidalgo → Capitán → Adelantado → Gobernador → Marqués → Virrey.</p>`;
     this.dialog('❓ How to play', html, [['Close', () => this.close()]]);
@@ -337,6 +370,7 @@ const UI = {
         <div>Discoveries: <b>${s.discoveries.length}/${DISCOVERIES.length}</b></div><div>Artifacts: <b>${s.artifacts.length}/${Object.keys(ARTIFACTS).length}</b></div>
         <div>Settlements conquered: <b>${s.stats.conquered}</b></div><div>Battles won: <b>${s.stats.won}/${s.stats.battles}</b></div>
         <div>Peoples met: <b>${met}</b></div><div>Spaniards lost: <b>${fmt(s.stats.soldiersLost)}</b></div>
+        <div>Baptisms: <b>${fmt(s.stats.converts || 0)}</b></div><div>Missions founded: <b>${s.settlements.filter((x) => x.converted >= 50).length}</b></div>
         <div>Native people killed in war: <b>${fmt(s.stats.warDeaths)}</b></div><div>Native people killed by epidemics: <b>${fmt(s.stats.diseaseDeaths)}</b></div>
       </div>
       <p class="history">Historians estimate that the Indigenous population of the Americas fell by as much as 90% in the century after 1492 — mostly from Old World diseases such as smallpox, measles and typhus, compounded by war, forced labour and famine. Many of the peoples in this game survive today: millions of people speak Maya languages, Quechua, Guaraní, Nahuatl, Mapudungun and Aymara.</p>`;

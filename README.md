@@ -17,9 +17,10 @@ Open `index.html` in any modern browser. No build step or install is needed. You
 
 - A map of the Atlantic and the Americas, from the Mississippi to Tierra del Fuego, with fog of war, rivers you can sail up (Amazon, Mississippi, Orinoco, Paraná), mountains, jungles and deserts.
 - Historical winds: the trade winds carry you west and the westerlies carry you home.
-- Provisions, storms, Caribbean hurricanes from August to October, and French corsairs.
+- Provisions: fish in coastal waters, forage on land, and receive food from friendly peoples. Watch out for storms, Caribbean hurricanes from August to October, and French corsairs.
 - About 85 native settlements across 30 peoples, each with its own attitude, rivals and allies. Trade, give gifts, demand tribute, recruit native allies, or attack.
-- Turn-based battles with tactics: arquebus volleys, cavalry charges, steel and shield, or holding formation. Fear of guns and horses fades as each people learns to fight them.
+- Turn-based battles with tactics: arquebus volleys, cavalry charges, steel and shield, or holding formation. The ground matters (cavalry on open plains, damp powder in the jungle), men tire and are wounded, and each people fights its own way. Fear of guns and horses fades as each people learns to fight them.
+- Friars to hire in Sevilla and send to preach in native towns and colonies, founding missions.
 - Disease: Old World epidemics (smallpox, measles, typhus, influenza) spread from town to town, often ahead of the Spanish themselves.
 - 39 artifacts to collect, 37 geographic discoveries, conquests that become tribute-paying colonies, and a chronicle of real events from 1494 to 1598.
 - Titles from Hidalgo to Virrey, autosave, and an end screen that tallies the human cost of the conquest.

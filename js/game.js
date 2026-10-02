@@ -23,14 +23,14 @@ const Game = {
       day: 0, lastMonth: null,
       ducats: 500, treasure: 0,
       soldiers: 40, horses: 4, arquebuses: 10, cannons: 1, allies: 0,
-      food: 260, goods: 60,
+      food: 260, goods: 60, priests: 1,
       shipType: 'caravel', hull: 100,
       ship: { x: 0, y: 0, dir: -1 }, party: null,
       fame: 0, crownGold: 0,
       settlements: [], ruins: [], cultures: {},
       artifacts: [], discoveries: [],
       log: [], chronicleShown: [],
-      stats: { battles: 0, won: 0, warDeaths: 0, diseaseDeaths: 0, soldiersLost: 0, conquered: 0, tiles: 0 },
+      stats: { battles: 0, won: 0, warDeaths: 0, diseaseDeaths: 0, soldiersLost: 0, conquered: 0, tiles: 0, converts: 0 },
       starveWarned: 0, tordesillas: false, over: false,
     };
     for (const [id, c] of Object.entries(CULTURES)) s.cultures[id] = { rel: c.rel, shock: 1, met: false };
@@ -48,7 +48,7 @@ const Game = {
         pop, pop0: pop, gold: extra.gold != null ? extra.gold : Math.round(T.gold[0] + rng() * (T.gold[1] - T.gold[0])),
         artifact: extra.artifact || null, cibola: !!extra.cibola,
         met: false, conquered: false, treasury: 0, recruits: 6,
-        infection: null, hadDiseases: [], allyReadyDay: 0,
+        infection: null, hadDiseases: [], allyReadyDay: 0, converted: 0, foodReadyDay: 0,
       });
     }
     for (const [name, lon, lat, art] of RUIN_SITES) {
@@ -146,6 +146,14 @@ const Game = {
   canAfford(cost) { return this.s.ducats + this.s.treasure >= cost; },
   addFame(n, why) { this.s.fame += n; if (why) this.log(`+${n} fame — ${why}`, 'fame'); },
 
+  dailyFood() { return 1 + this.s.soldiers / 20 + this.s.allies / 40; },
+  addFood(n) {
+    const s = this.s;
+    const add = Math.max(0, Math.min(Math.round(n), this.ship().food - s.food));
+    s.food += add;
+    return add;
+  },
+
   reveal(cx, cy, r) {
     let changed = false;
     for (let y = cy - r; y <= cy + r; y++) for (let x = cx - r; x <= cx + r; x++) {
@@ -164,7 +172,7 @@ const Game = {
     const before = this.date();
     s.day += days;
     // provisions
-    const eat = (1 + s.soldiers / 20 + s.allies / 40) * days;
+    const eat = this.dailyFood() * days;
     s.food -= eat;
     if (s.food <= 0) {
       s.food = 0;
@@ -222,7 +230,7 @@ const Game = {
     // colonies
     for (const st of sts) if (st.conquered) {
       const T = SETTLEMENT_TYPES[st.type];
-      st.treasury += Math.round(T.income * Math.max(0.3, st.pop / st.pop0));
+      st.treasury += Math.round(T.income * Math.max(0.3, st.pop / st.pop0) * (st.converted >= 50 ? 1.25 : 1));
       st.recruits = Math.min(20, st.recruits + 1);
     }
     // relations slowly cool towards neutral
@@ -285,6 +293,9 @@ const Game = {
     this.reveal(nx, ny, 6);
     this.advance(days);
     if (s.over) return false;
+    // the crew fishes in coastal waters and rivers
+    const wt = World.t(nx, ny);
+    if (wt === TT.SEA || wt === TT.RIVER) this.addFood(this.dailyFood() * days * 0.6);
     this.checkDiscoveries(nx, ny);
     return this.seaEvents(nx, ny);
   },
@@ -369,6 +380,8 @@ const Game = {
     this.reveal(nx, ny, World.t(nx, ny) === TT.MOUNTAIN ? 5 : 4);
     this.advance(days);
     if (s.over) return false;
+    // living off the land as they march
+    this.addFood(this.dailyFood() * days * (FORAGE[World.t(nx, ny)] || 0) * 0.9);
     this.checkDiscoveries(nx, ny);
     if (site) { this.interact(site, false); return false; }
     return this.landEvents(nx, ny);
@@ -405,6 +418,66 @@ const Game = {
     return true;
   },
 
+  forage() {
+    const s = this.s;
+    if (!s.party || s.over) return;
+    const t = World.t(s.party.x, s.party.y);
+    const frac = FORAGE[t] || 0;
+    if (s.food >= this.ship().food) { UI.toast('Your stores are already full.'); return; }
+    this.advance(5);
+    if (s.over) return;
+    const got = this.addFood(this.dailyFood() * 5 * (1 + frac * 4) * rand(0.85, 1.2) + 40 * frac);
+    const what = {
+      [TT.GRASS]: 'hunt deer and turkeys and gather wild beans', [TT.SAVANNA]: 'hunt deer and rheas and dig wild roots',
+      [TT.STEPPE]: 'hunt guanacos and rheas', [TT.FOREST]: 'hunt game and gather nuts and berries',
+      [TT.JUNGLE]: 'gather fruit, catch peccaries and fish the streams', [TT.RIVER]: 'catch fish and turtles in the river',
+      [TT.MOUNTAIN]: 'search the cold slopes, finding little', [TT.DESERT]: 'find only cactus fruit and lizards',
+    }[t] || 'search for food';
+    this.log(`Your men spend five days foraging. They ${what}: +${got} provisions.`, got > 20 ? 'good' : 'warn');
+    UI.toast(`Foraging: +${got} provisions`);
+    if (!this.landEvents(s.party.x, s.party.y)) return;
+    UI.refresh();
+  },
+
+  // Friars preach in a settlement. Returns a message for the dialog.
+  preach(st) {
+    const s = this.s, cs = s.cultures[st.culture];
+    if (s.priests <= 0) return null;
+    this.advance(10);
+    if (s.over) return null;
+    // a friar may be killed by those who resent the newcomers
+    const risk = st.conquered ? 0.03 : clamp(0.18 - cs.rel / 250, 0.03, 0.4);
+    if (Math.random() < risk) {
+      s.priests--;
+      const msg = `A friar preaching in ${st.name} is killed by people who want nothing of the strangers' god. He is remembered as a martyr.`;
+      this.log(msg, 'bad');
+      return `<p class="bad">${msg}</p>`;
+    }
+    const size = { village: 1, town: 0.8, city: 0.6, capital: 0.45 }[st.type];
+    const open = { taino: 1.2, guarani: 1.3, totonac: 1.2, tlaxcala: 1.2, kaqchikel: 1.1, canari: 1.2, huanca: 1.2, mapuche: 0.5, mexica: 0.8, inca: 0.8, kalinago: 0.6, charrua: 0.6 }[st.culture] || 1;
+    const friars = Math.min(s.priests, 4);
+    const gain = Math.max(2, Math.round(rand(6, 14) * size * open * (st.conquered ? 1.5 : 1) * (0.75 + friars * 0.25)));
+    const before = st.converted;
+    st.converted = Math.min(100, st.converted + gain);
+    const converts = Math.round(st.pop * (st.converted - before) / 100);
+    s.stats.converts += converts;
+    if (!st.conquered) this.changeRel(st.culture, 3);
+    let html = `<p>Your friars spend ten days in ${st.name}, preaching through interpreters, teaching prayers and baptising. About <b>${fmt(converts)}</b> people accept baptism. (${st.converted}% Christian)</p>`;
+    this.log(`Friars baptise about ${fmt(converts)} people in ${st.name} (${st.converted}% Christian).`, 'good');
+    const T = SETTLEMENT_TYPES[st.type];
+    if (before < 50 && st.converted >= 50) {
+      const f = Math.round(T.fame / 2) + 5;
+      html += `<p class="good"><b>A mission church rises in ${st.name}.</b> Converts here are more willing to trade, feed and fight alongside you.</p>`;
+      this.addFame(f, `mission founded at ${st.name}`);
+    }
+    if (before < 100 && st.converted >= 100) {
+      const f = T.fame + 10;
+      html += `<p class="good"><b>${st.name} is now a Christian town.</b></p><p class="flavor">Many keep honouring their old gods in secret, behind the faces of the saints.</p>`;
+      this.addFame(f, `conversion of ${st.name}`);
+    }
+    return html;
+  },
+
   checkDiscoveries(x, y) {
     const s = this.s;
     for (const [id, name, lon, lat, r, fame, text] of DISCOVERIES) {
@@ -437,6 +510,10 @@ const Game = {
     if (!st.met) {
       st.met = true;
       if (!cul.met) { cul.met = true; this.log(`First contact with the ${CULTURES[st.culture].name}. ${CULTURES[st.culture].desc}`, 'big'); }
+      if (cul.rel >= 0) {
+        const got = this.addFood(randi(40, 90));
+        if (got > 0) this.log(`The people of ${st.name} come out to greet you with gifts of food: +${got} provisions.`, 'good');
+      }
     }
     this.contactDisease(st, 0.5);
     UI.encounterDialog(st);
@@ -516,9 +593,10 @@ const Game = {
     st.conquered = true;
     st.pop = Math.max(50, st.pop - kills);
     const loot = st.gold; s.treasure += loot; st.gold = 0;
+    const grain = this.addFood({ village: 100, town: 200, city: 400, capital: 800 }[st.type]);
     s.stats.conquered++;
     const T = SETTLEMENT_TYPES[st.type];
-    let html = `<p>${st.name} has fallen. Your men seize <b>${fmt(loot)}</b> in gold and silver.</p>`;
+    let html = `<p>${st.name} has fallen. Your men seize <b>${fmt(loot)}</b> in gold and silver${grain ? ` and <b>${grain}</b> provisions from the granaries` : ''}.</p>`;
     this.log(`${st.name} is conquered! Looted ${fmt(loot)} in treasure.`, 'good');
     this.addFame(T.fame, `conquest of ${st.name}`);
     if (st.artifact && !s.artifacts.includes(st.artifact)) {
@@ -605,6 +683,9 @@ const Game = {
         const b = bin.charCodeAt(i);
         for (let k = 0; k < 8; k++) if (b & (1 << k)) this.explored[i * 8 + k] = 1;
       }
+      if (this.s.priests == null) this.s.priests = 0;
+      if (this.s.stats.converts == null) this.s.stats.converts = 0;
+      for (const st of this.s.settlements) { if (st.converted == null) st.converted = 0; if (st.foodReadyDay == null) st.foodReadyDay = 0; }
       this.buildSiteIndex();
       return true;
     } catch (e) { console.error(e); return false; }

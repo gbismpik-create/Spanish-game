@@ -324,7 +324,7 @@ const SHIPS = {
   galleon: { name: 'Galleon', men: 400, food: 1600, hull: 260, speed: 0.85, cannons: 14, cost: 5000 },
 };
 
-const PRICES = { soldier: 25, horse: 80, arquebus: 40, cannon: 250, food: 1, goods: 2, repair: 2 };
+const PRICES = { priest: 60, soldier: 25, horse: 80, arquebus: 40, cannon: 250, food: 1, goods: 2, repair: 2 };
 
 const TITLES = [[0, 'Hidalgo'], [150, 'Capitán'], [400, 'Adelantado'], [900, 'Gobernador'], [1800, 'Marqués'], [3000, 'Virrey']];
 
