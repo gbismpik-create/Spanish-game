@@ -20,9 +20,21 @@ const UI = {
     $('#btn-save').addEventListener('click', () => Game.save(false));
     $('#btn-zin').addEventListener('click', () => Render.zoomBy(1.25));
     $('#btn-zout').addEventListener('click', () => Render.zoomBy(0.8));
-    $('#btn-log').addEventListener('click', () => $('#log').classList.toggle('hidden'));
+    $('#btn-log').addEventListener('click', () => { $('#log').classList.toggle('hidden'); this.closeMore(); });
+    $('#btn-mini').addEventListener('click', () => { $('#minimap').classList.toggle('hidden'); this.closeMore(); });
+    $('#btn-more').addEventListener('click', (e) => { e.stopPropagation(); $('#actions').classList.toggle('more-open'); });
+    document.querySelectorAll('#actions .sec').forEach((b) => b.addEventListener('click', () => this.closeMore()));
+    // on phones the HUD shows the key numbers; tap it for everything
+    $('#hud').addEventListener('click', () => $('#hud').classList.toggle('expanded'));
+    // on phones the log is a one-line ticker; tap it to read the whole log
+    $('#log').addEventListener('click', () => {
+      $('#log').classList.toggle('open');
+      const l = $('#log-lines'); l.scrollTop = l.scrollHeight;
+    });
     $('#modal-bg').addEventListener('click', (e) => { if (e.target.id === 'modal-bg' && this.closable) this.close(); });
   },
+
+  closeMore() { $('#actions').classList.remove('more-open'); },
 
   refresh() {
     const s = Game.s;
@@ -30,26 +42,27 @@ const UI = {
     const sh = Game.ship();
     const pos = Game.active();
     const wind = Game.windAt(World.lat(pos.y));
+    // the first entry of each item marks it as key (shown on phones) or minor
     const items = [
       ['📅', Game.dateStr(), Game.monarch()],
-      ['🎖️', `${Game.title()} ${s.captain}`, `Fame ${fmt(s.fame)}`],
+      ['🎖️', `${Game.title()} ${s.captain}`, `Fame ${fmt(s.fame)}`, 1],
       ['💰', fmt(s.ducats), 'Ducats (your money)'],
       ['🪙', fmt(s.treasure), 'Treasure carried (gold & silver). Deliver to Sevilla for fame.'],
       ['⚔️', s.soldiers, `Soldiers (ship holds ${sh.men})`],
-      ['🐎', s.horses, 'Horses'],
-      ['🔫', s.arquebuses, 'Arquebuses'],
-      ['💣', s.cannons, `Cannon (max ${sh.cannons})`],
-      ['🏹', fmt(s.allies), 'Native allies (leave when you re-embark)'],
-      ['🪶', fmt(s.auxiliaries), 'Native auxiliaries in your service (paid monthly, sail with you)'],
-      ['✝️', s.priests, 'Friars: send them to preach in native towns and colonies'],
+      ['🐎', s.horses, 'Horses', 1],
+      ['🔫', s.arquebuses, 'Arquebuses', 1],
+      ['💣', s.cannons, `Cannon (max ${sh.cannons})`, 1],
+      ['🏹', fmt(s.allies), 'Native allies (leave when you re-embark)', 1],
+      ['🪶', fmt(s.auxiliaries), 'Native auxiliaries in your service (paid monthly, sail with you)', 1],
+      ['✝️', s.priests, 'Friars: send them to preach in native towns and colonies', 1],
       ['🍖', `${fmt(s.food)}`, `Provisions (${Math.floor(s.food / (1 + s.soldiers / 20 + s.allies / 40))} days)`],
-      ['📦', s.goods, 'Trade goods: beads, cloth, iron tools'],
+      ['📦', s.goods, 'Trade goods: beads, cloth, iron tools', 1],
       ['⚓', `${s.hull}/${sh.hull}`, `${sh.name} hull`],
-      ['⭐', fmt(s.fame), 'Fame'],
+      ['⭐', fmt(s.fame), 'Fame', 1],
     ];
-    $('#hud').innerHTML = items.map(([i, v, t]) => `<div class="hud-item${(i === '🍖' && s.food < 60) || (i === '⚓' && s.hull < 35) ? ' alert' : ''}" title="${t}"><span>${i}</span>${v}</div>`).join('')
-      + `<div class="hud-item wind" title="Wind at your latitude">🌬️ ${wind.name} ${wind.dir < 0 ? '←' : wind.dir > 0 ? '→' : '·'}</div>`;
-    $('#btn-land').textContent = s.party ? '⛵ Embark' : '🚣 Land';
+    $('#hud').innerHTML = items.map(([i, v, t, minor]) => `<div class="hud-item${minor ? ' minor' : ''}${(i === '🍖' && s.food < 60) || (i === '⚓' && s.hull < 35) ? ' alert' : ''}" title="${t}"><span>${i}</span>${v}</div>`).join('')
+      + `<div class="hud-item wind minor" title="Wind at your latitude">🌬️ ${wind.name} ${wind.dir < 0 ? '←' : wind.dir > 0 ? '→' : '·'}</div>`;
+    $('#btn-land').innerHTML = s.party ? '<span class="ico">⛵</span><span class="lbl">Embark</span>' : '<span class="ico">🚣</span><span class="lbl">Land</span>';
     $('#btn-careen').style.display = (!s.party && s.hull < sh.hull * 0.6) ? '' : 'none';
     $('#btn-forage').style.display = s.party ? '' : 'none';
     $('#mode').textContent = s.party ? 'Expedition on land — click to march, click the ship to re-embark' : 'At sea — click to sail, click land to send an expedition ashore';
@@ -427,7 +440,7 @@ const UI = {
     const html = `
       <p><b>The year is 1492.</b> You command a small expedition sailing from Sevilla into the unknown west. Explore, conquer, find ancient artifacts and win fame before the century ends in 1600.</p>
       <h3>Controls</h3>
-      <ul><li><b>Click / tap</b> on the map to sail or march there. Drag to pan, scroll or +/− to zoom.</li>
+      <ul><li><b>Click / tap</b> on the map to sail or march there. Drag to pan, scroll or +/− to zoom. On a phone, <b>pinch</b> to zoom and <b>press and hold</b> a tile to see what is there. Tap the top bar or the log to expand them; more buttons are under <b>⋯</b>.</li>
       <li><b>Arrow keys / WASD</b> move one tile (Q/E/Z/C diagonals). <b>Space</b> recentres. <b>L</b> lands or re-embarks.</li>
       <li>Click a <b>land tile</b> while at sea to sail to the nearest shore and send an expedition ashore. Click your <b>ship</b> to re-embark.</li></ul>
       <h3>Sailing</h3>

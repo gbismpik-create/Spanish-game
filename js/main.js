@@ -19,6 +19,7 @@ const Render = {
     this.miniCtx = this.mini.getContext('2d');
     this.mini.width = World.W; this.mini.height = World.H;
     this.lastMini = 0;
+    if (Math.min(window.innerWidth, window.innerHeight) < 600) this.zoom = 20;
     window.addEventListener('resize', () => this.resize());
     this.resize();
   },
@@ -591,24 +592,71 @@ const Input = {
 
   init() {
     const cv = Render.cv;
-    cv.addEventListener('pointerdown', (e) => { this.drag = { x: e.clientX, y: e.clientY, cx: Render.cx, cy: Render.cy, moved: false }; cv.setPointerCapture(e.pointerId); });
+    const tip = $('#tooltip');
+    this.pointers = new Map();
+    cv.addEventListener('pointerdown', (e) => {
+      try { cv.setPointerCapture(e.pointerId); } catch (err) { /* synthetic or already released */ }
+      this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (e.pointerType !== 'mouse') tip.style.display = 'none';
+      if (this.pointers.size === 2) {
+        // second finger: start a pinch, cancel the tap and long-press
+        const [p1, p2] = [...this.pointers.values()];
+        this.pinch = { d: Math.hypot(p1.x - p2.x, p1.y - p2.y), mx: (p1.x + p2.x) / 2, my: (p1.y + p2.y) / 2 };
+        if (this.drag) this.drag.moved = true;
+        clearTimeout(this.holdTimer);
+        return;
+      }
+      this.drag = { x: e.clientX, y: e.clientY, cx: Render.cx, cy: Render.cy, moved: false, held: false };
+      // press and hold shows what is on a tile (phones have no hover)
+      clearTimeout(this.holdTimer);
+      if (e.pointerType !== 'mouse') {
+        this.holdTimer = setTimeout(() => {
+          if (!this.drag || this.drag.moved) return;
+          this.drag.held = true;
+          const t = Render.screenToTile(this.drag.x, this.drag.y);
+          Render.hover = t;
+          this.tooltip(this.drag.x, this.drag.y - 70, t);
+          if (navigator.vibrate) try { navigator.vibrate(15); } catch (err) { /* not allowed */ }
+        }, 450);
+      }
+    });
     cv.addEventListener('pointermove', (e) => {
+      if (this.pointers.has(e.pointerId)) this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.pinch && this.pointers.size >= 2) {
+        const [p1, p2] = [...this.pointers.values()];
+        const d = Math.hypot(p1.x - p2.x, p1.y - p2.y), mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+        if (this.pinch.d > 0) Render.zoomBy(d / this.pinch.d, mx, my);
+        Render.cx -= (mx - this.pinch.mx) / Render.zoom; Render.cy -= (my - this.pinch.my) / Render.zoom;
+        Render.free = true;
+        this.pinch = { d, mx, my };
+        return;
+      }
       const t = Render.screenToTile(e.clientX, e.clientY);
-      Render.hover = t;
+      if (e.pointerType === 'mouse') Render.hover = t;
       if (this.drag) {
         const dx = e.clientX - this.drag.x, dy = e.clientY - this.drag.y;
-        if (Math.hypot(dx, dy) > 6) this.drag.moved = true;
-        if (this.drag.moved) { Render.free = true; Render.cx = this.drag.cx - dx / Render.zoom; Render.cy = this.drag.cy - dy / Render.zoom; }
-        $('#tooltip').style.display = 'none';
-      } else this.tooltip(e.clientX, e.clientY, t);
+        if (Math.hypot(dx, dy) > (e.pointerType === 'mouse' ? 6 : 10)) { this.drag.moved = true; clearTimeout(this.holdTimer); }
+        if (this.drag.moved && !this.drag.held) { Render.free = true; Render.cx = this.drag.cx - dx / Render.zoom; Render.cy = this.drag.cy - dy / Render.zoom; tip.style.display = 'none'; }
+      } else if (e.pointerType === 'mouse') this.tooltip(e.clientX, e.clientY, t);
     });
-    cv.addEventListener('pointerup', (e) => {
+    const end = (e) => {
+      this.pointers.delete(e.pointerId);
+      clearTimeout(this.holdTimer);
+      if (this.pinch) {
+        if (this.pointers.size < 2) this.pinch = null;
+        if (this.pointers.size === 0) this.drag = null;
+        else if (this.drag) this.drag.moved = true;
+        return;
+      }
       const d = this.drag; this.drag = null;
-      if (!d || d.moved || UI.open || !Game.s || Game.s.over) return;
+      if (e.type === 'pointercancel' || !d || d.moved || d.held || UI.open || !Game.s || Game.s.over) return;
+      if (e.pointerType !== 'mouse') Render.hover = null;
       const t = Render.screenToTile(e.clientX, e.clientY);
       if (World.inb(t.x, t.y)) this.order(t.x, t.y);
-    });
-    cv.addEventListener('pointerleave', () => { Render.hover = null; $('#tooltip').style.display = 'none'; });
+    };
+    cv.addEventListener('pointerup', end);
+    cv.addEventListener('pointercancel', end);
+    cv.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') { Render.hover = null; tip.style.display = 'none'; } });
     cv.addEventListener('wheel', (e) => { e.preventDefault(); Render.zoomBy(e.deltaY < 0 ? 1.15 : 0.87, e.clientX, e.clientY); }, { passive: false });
     Render.mini.addEventListener('click', (e) => {
       const r = Render.mini.getBoundingClientRect();
@@ -658,8 +706,8 @@ const Input = {
     if (World.shipOK(t.x, t.y) && !World.landOK(t.x, t.y)) { const w = Game.windAt(lat); html += `<br><small>🌬️ ${w.name}</small>`; }
     tip.innerHTML = html;
     tip.style.display = 'block';
-    tip.style.left = Math.min(px + 16, window.innerWidth - 260) + 'px';
-    tip.style.top = Math.min(py + 16, window.innerHeight - 100) + 'px';
+    tip.style.left = clamp(px + 16, 8, window.innerWidth - Math.min(260, window.innerWidth - 16)) + 'px';
+    tip.style.top = clamp(py + 16, 60, window.innerHeight - 120) + 'px';
   },
 
   landOrEmbark() {
@@ -811,8 +859,40 @@ const Main = {
 };
 
 // browsers only allow audio after the player interacts with the page
-['pointerdown', 'keydown'].forEach((ev) => document.addEventListener(ev, () => Sound.init(), { capture: true }));
+['pointerdown', 'touchend', 'click', 'keydown'].forEach((ev) => document.addEventListener(ev, () => Sound.init(), { capture: true }));
 document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('button')) Sound.play('click'); });
+
+// installable app: offline support and the install button
+const Install = {
+  prompt: null,
+  init() {
+    if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+      navigator.serviceWorker.register('sw.js').catch(() => { /* not allowed here (e.g. embedded preview) */ });
+    }
+    const standalone = window.matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone;
+    let embedded = true;
+    try { embedded = window.self !== window.top; } catch (err) { /* cross-origin frame */ }
+    if (standalone || embedded) return;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      this.prompt = e;
+      $('#btn-install').classList.remove('hidden');
+    });
+    $('#btn-install').addEventListener('click', async () => {
+      if (!this.prompt) return;
+      this.prompt.prompt();
+      try { await this.prompt.userChoice; } catch (err) { /* dismissed */ }
+      this.prompt = null;
+      $('#btn-install').classList.add('hidden');
+    });
+    const iOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (iOS && location.protocol.startsWith('http')) {
+      const hint = $('#install-hint');
+      hint.innerHTML = 'To install on iPhone or iPad: tap <b>Share</b> <span aria-hidden="true">⎋</span> in Safari, then <b>Add to Home Screen</b>.';
+      hint.classList.remove('hidden');
+    }
+  },
+};
 
 window.addEventListener('load', () => {
   setTimeout(() => {
@@ -827,6 +907,7 @@ window.addEventListener('load', () => {
     $('#btn-new').addEventListener('click', () => { Game.newGame($('#captain').value.trim() || 'Capitán'); Main.start(false); });
     $('#btn-continue').addEventListener('click', () => { if (Game.load()) Main.start(true); else UI.toast('Save could not be loaded.'); });
     $('#btn-howto').addEventListener('click', () => UI.help());
+    try { Install.init(); } catch (err) { /* install support is optional */ }
     window.__ready = true;
   }, 30);
 });

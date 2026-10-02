@@ -117,16 +117,86 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .title-buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .title-buttons button { font-size: 18px; padding: 10px 18px; }
 
-@media (max-width: 800px) {
-  #hud { font-size: 11.5px; padding: 4px; }
-  .hud-item { padding: 1px 4px; }
+/* ---------- phones and small tablets ---------- */
+html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+button { touch-action: manipulation; }
+#hud { padding-top: max(6px, env(safe-area-inset-top)); padding-left: max(8px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right)); }
+#actions { bottom: max(8px, env(safe-area-inset-bottom)); }
+#btn-more { display: none; }
+#install-hint { font-size: 14px; color: var(--parch2); max-width: 420px; margin: 12px auto 0; }
+
+@media (max-width: 800px), (max-height: 500px) {
+  body { -webkit-user-select: none; user-select: none; }
+  #hud { font-size: 12.5px; padding: 4px; padding-top: max(4px, env(safe-area-inset-top)); flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 3px; }
+  #hud::-webkit-scrollbar { display: none; }
+  #hud .minor { display: none; }
+  #hud.expanded { flex-wrap: wrap; }
+  #hud.expanded .minor { display: block; }
+  .hud-item { padding: 2px 5px; }
+  .hud-item.wind { margin-left: 0; }
   #mode { display: none; }
-  #log { width: auto; left: 8px; top: auto; bottom: 100px; max-height: 22vh; }
-  #minimap { width: 114px; height: 101px; bottom: auto; top: 70px; }
-  #actions button { padding: 6px 9px; font-size: 13px; }
-  .tactics, .stats, .disc-list { grid-template-columns: 1fr; }
+  /* the log becomes a one-line ticker above the buttons */
+  #log { width: auto; left: 8px; right: 8px; top: auto; bottom: calc(64px + env(safe-area-inset-bottom)); max-height: 50vh; }
+  #log:not(.open) .log-title { display: none; }
+  #log:not(.open) #log-lines { max-height: 2.9em; overflow: hidden; }
+  #log.open #log-lines { max-height: 45vh; }
+  #log-lines { font-size: 13px; }
+  #minimap { width: 100px; height: 89px; top: calc(40px + env(safe-area-inset-top)); bottom: auto; left: max(8px, env(safe-area-inset-left)); }
+  /* one row of large icon buttons; the rest live under the ⋯ menu */
+  #actions { left: 6px; right: 6px; gap: 5px; flex-wrap: nowrap; justify-content: space-between; }
+  #actions button { padding: 9px 0; font-size: 20px; flex: 1 1 0; min-width: 0; min-height: 46px; }
+  #actions .lbl { display: none; }
+  #actions .sec { display: none; }
+  #actions .desk { display: none !important; }
+  #btn-more { display: block; }
+  #actions.more-open { flex-wrap: wrap; }
+  #actions.more-open button { flex: 1 1 18%; }
+  #actions.more-open .sec:not(.desk) { display: block; flex: 1 1 28%; font-size: 15px; order: -1; }
+  #actions.more-open .sec .lbl { display: inline; margin-left: 4px; }
+  #toasts { bottom: calc(120px + env(safe-area-inset-bottom)); width: calc(100% - 24px); }
+  .toast { font-size: 14px; }
+  #tooltip { font-size: 13.5px; }
+  /* dialogs fill the screen */
+  #modal-bg { padding: max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left)); }
+  #modal { max-height: 100%; height: auto; }
+  #modal h2 { font-size: 22px; padding: 10px 14px 4px; }
+  .modal-body { padding: 6px 12px; font-size: 15px; }
+  .modal-buttons { padding: 8px 12px 10px; }
+  .modal-buttons button { font-size: 15px; padding: 10px 12px; flex: 1 1 auto; }
+  .shop-row button, .bcard button, .svc button { padding: 8px 11px; font-size: 14px; }
+  .stats, .disc-list { grid-template-columns: 1fr; }
+  /* battles: both sides side by side, tactics pinned to the bottom */
+  .battle { gap: 6px; }
+  .battle .vs { display: none; }
+  .battle .side { padding: 6px 8px; font-size: 12.5px; min-width: 0; }
+  .battle h4 { font-size: 14px; }
+  .battle-log { max-height: 30vh; font-size: 13px; }
+  .tactics { grid-template-columns: 1fr 1fr; position: sticky; bottom: -6px; background: var(--parch2); padding: 6px 0 4px; margin: 0 -2px; }
+  .tactic { padding: 9px 8px; font-size: 14px; }
+  .tactic small { display: none; }
   #title-screen h1 { font-size: 52px; }
-  .b-title { font-size: 28px; }
+  .b-title { font-size: 26px; }
+  .b-text { font-size: 15px; padding: 0 12px; }
+}
+/* phone held sideways: short screen */
+@media (max-height: 500px) {
+  #log { right: auto; width: 46%; }
+  #modal h2 { font-size: 19px; padding: 6px 12px 2px; }
+  .modal-body { padding: 4px 12px; font-size: 14px; }
+  .modal-buttons { padding: 6px 12px; }
+  .modal-buttons button { padding: 7px 10px; }
+  .stats { grid-template-columns: 1fr 1fr; }
+  .battle .side { padding: 5px 8px; font-size: 12.5px; }
+  .battle-log { max-height: 64px; margin: 4px 0; }
+  .tactics { grid-template-columns: repeat(4, 1fr); }
+  .tactic { padding: 6px 8px; font-size: 13px; }
+  .tactic small { display: none; }
+  #actions.more-open .sec:not(.desk) { flex: 1 1 13%; }
+  #minimap { width: 80px; height: 71px; }
+  #title-screen h1 { font-size: 40px; }
+  .title-cross { font-size: 30px; }
+  .intro { font-size: 14px; }
+}
 }
 
 /* colony city screen */

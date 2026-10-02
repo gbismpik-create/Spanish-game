@@ -31,6 +31,9 @@ Guidance for working on **Conquista: The New World (1492–1600)**, a browser st
 | `js/ui.js` | HUD, ship's log, toasts and banners, and every dialog: encounters, colonies, the Sevilla port, codex, atlas, help, end screen. |
 | `js/main.js` | Canvas rendering (`Render`), sprites, fog of war, minimap, mouse/keyboard input and click-to-move orders (`Input`), the main loop and boot (`Main`). |
 | `css/style.css` | All styling. Parchment dialogs on a dark map, with gold accents. |
+| `manifest.webmanifest`, `sw.js`, `icons/` | The installable app: web app manifest, a network-first service worker for offline play, and the app icons. **When you add a game file, add it to `FILES` in `sw.js`** (and bump `CACHE`), and if it lives in a new folder, add that folder to the copy step in the Pages workflow. |
+| `tools/make-icons.js` | Regenerates `icons/` from the game's own caravel sprite (needs the local server running). |
+| `.github/workflows/pages.yml` | Deploys the game to GitHub Pages on every push to the default branch. |
 | `build.js` | Produces the single-file artifact bundle (see Publishing). |
 | `tests/smoke.js` | Headless end-to-end smoke test (see Testing). |
 
@@ -64,6 +67,11 @@ Guidance for working on **Conquista: The New World (1492–1600)**, a browser st
 
 ## Publishing
 
+**Phone app (GitHub Pages):** every push to the default branch is deployed to https://gbismpik-create.github.io/Spanish-game/, where it can be installed with "Add to Home Screen". This requires the one-time repo setting Settings → Pages → Source: "GitHub Actions".
+
+**Mobile layout:** the phone layout is driven by the `@media (max-width: 800px), (max-height: 500px)` block in `css/style.css`. HUD items marked minor, buttons with class `sec` (shown under ⋯) and the log ticker are all handled there. Touch input (pinch, two-finger pan, press-and-hold info) lives in `Input.init` in `main.js`. Check new UI at phone sizes in both orientations.
+
+
 The playable claude.ai artifact is a single bundled HTML file: the `<body>` of `index.html` with `css/style.css` and the eight JS files inlined in load order, without its own `<html>`/`<head>` tags. Generate it with `node build.js` (plain Node, no dependencies). Never edit the bundle by hand.
 
 ## Current status
@@ -81,6 +89,7 @@ The playable claude.ai artifact is a single bundled HTML file: the `<body>` of `
 - Turn-based battles with tactics and per-culture war styles
 - Sevilla port and treasury, scoring, end screen with human cost
 - Save/load
+- Installable phone app: mobile layout, touch controls (pinch, hold for info), offline service worker, icons, GitHub Pages deployment
 - Audio: procedural music that follows the situation, ambience, sound effects, and a 🔊 settings panel
 
 **Next**

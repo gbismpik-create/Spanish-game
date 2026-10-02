@@ -2,9 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#261d15">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Conquista">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <title>Conquista: The New World</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E⛵%3C/text%3E%3C/svg%3E">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
@@ -18,18 +25,20 @@
     <div id="log"><div class="log-title">Ship's Log</div><div id="log-lines"></div></div>
     <canvas id="minimap" title="Click to look elsewhere"></canvas>
     <div id="actions">
-      <button id="btn-land" title="Land an expedition / re-embark (L)">🚣 Land</button>
-      <button id="btn-forage" title="Spend five days hunting and gathering (F)">🌿 Forage</button>
-      <button id="btn-careen" title="Beach the ship to repair her (20 days)">🔧 Careen</button>
-      <button id="btn-center" title="Centre on your expedition (Space)">🎯</button>
-      <button id="btn-zin" title="Zoom in">＋</button>
-      <button id="btn-zout" title="Zoom out">－</button>
-      <button id="btn-codex" title="Artifacts">📜 Codex</button>
-      <button id="btn-disc" title="Discoveries and peoples">🧭 Atlas</button>
-      <button id="btn-log" title="Show/hide the log">📖</button>
-      <button id="btn-save" title="Save game">💾</button>
-      <button id="btn-sound" title="Sound settings">🔊</button>
-      <button id="btn-help" title="How to play">❓</button>
+      <button id="btn-land" title="Land an expedition / re-embark (L)"><span class="ico">🚣</span><span class="lbl">Land</span></button>
+      <button id="btn-forage" title="Spend five days hunting and gathering (F)"><span class="ico">🌿</span><span class="lbl">Forage</span></button>
+      <button id="btn-careen" title="Beach the ship to repair her (20 days)"><span class="ico">🔧</span><span class="lbl">Careen</span></button>
+      <button id="btn-center" title="Centre on your expedition (Space)"><span class="ico">🎯</span></button>
+      <button id="btn-codex" title="Artifacts"><span class="ico">📜</span><span class="lbl">Codex</span></button>
+      <button id="btn-zin" class="sec desk" title="Zoom in"><span class="ico">＋</span></button>
+      <button id="btn-zout" class="sec desk" title="Zoom out"><span class="ico">－</span></button>
+      <button id="btn-disc" class="sec" title="Discoveries and peoples"><span class="ico">🧭</span><span class="lbl">Atlas</span></button>
+      <button id="btn-log" class="sec" title="Show/hide the log"><span class="ico">📖</span><span class="lbl">Log</span></button>
+      <button id="btn-mini" class="sec" title="Show/hide the minimap"><span class="ico">🗺️</span><span class="lbl">Map</span></button>
+      <button id="btn-save" class="sec" title="Save game"><span class="ico">💾</span><span class="lbl">Save</span></button>
+      <button id="btn-sound" class="sec" title="Sound settings"><span class="ico">🔊</span><span class="lbl">Sound</span></button>
+      <button id="btn-help" class="sec" title="How to play"><span class="ico">❓</span><span class="lbl">Help</span></button>
+      <button id="btn-more" title="More"><span class="ico">⋯</span></button>
     </div>
     <div id="banner"></div>
     <div id="toasts"></div>
@@ -50,7 +59,9 @@
           <button id="btn-new">⚓ New Expedition</button>
           <button id="btn-continue">📜 Continue</button>
           <button id="btn-howto">❓ How to play</button>
+          <button id="btn-install" class="hidden">📲 Install app</button>
         </div>
+        <p id="install-hint" class="hidden"></p>
       </div>
     </div>
   </div>
