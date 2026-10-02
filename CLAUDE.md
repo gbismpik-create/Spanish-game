@@ -4,10 +4,19 @@ Guidance for working on **Conquista: The New World (1492–1600)**, a browser st
 
 ## Running
 
-- Plain HTML/CSS/JavaScript. There is no build step, no bundler, no npm dependencies and no framework.
+- Plain HTML/CSS/JavaScript. There is no build step for development, no bundler, no npm dependencies and no framework.
 - Open `index.html` in a browser, or serve the folder: `npx http-server -p 8123 -c-1 .` and visit `http://localhost:8123`.
 - Scripts are classic `<script>` tags (not ES modules) loaded in a fixed order in `index.html`: `data.js` → `world.js` → `game.js` → `battle.js` → `ui.js` → `main.js`. Each file defines globals (`World`, `Game`, `Battle`, `UI`, `Render`, `Input`, `Main`) used by later files. Keep that order when adding files.
-- There is no test suite. Verify changes by driving the game headlessly with Playwright (Chromium is at `/opt/pw-browsers`). `window.__ready` becomes true once the map is generated, and game objects can be called from `page.evaluate` (for example `Game.s`, `Input.order(x, y)`, `Battle.start({...})`). Watch for `pageerror` events. Random events like storms can interrupt scripted runs, so don't treat one timeout as a bug.
+
+## Testing
+
+- Run `node tests/smoke.js` after every change. It boots the game headlessly with Playwright (Chromium is at `/opt/pw-browsers`), sails the ship, lands a party, fights one battle, saves and reloads, and fails on any `pageerror`. When you add a major system, extend the smoke test to touch it.
+- `window.__ready` becomes true once the map is generated. Game objects can be called from `page.evaluate` (for example `Game.s`, `Input.order(x, y)`, `Battle.start({...})`).
+- **Debug mode**: load the game with URL flags to make runs repeatable:
+  - `?seed=N` fixes the random number generator, so the same seed gives the same map and rolls.
+  - `?noevents=1` turns off random sea and land events (storms and hurricanes, corsairs, ambushes, jungle fever).
+  Always use both in automated tests. All randomness must go through the seeded RNG, never `Math.random()` directly.
+- Without debug flags, random events like storms can interrupt scripted runs, so don't treat one timeout as a bug.
 
 ## Architecture
 
@@ -20,6 +29,8 @@ Guidance for working on **Conquista: The New World (1492–1600)**, a browser st
 | `js/ui.js` | HUD, ship's log, toasts and banners, and every dialog: encounters, colonies, the Sevilla port, codex, atlas, help, end screen. |
 | `js/main.js` | Canvas rendering (`Render`), sprites, fog of war, minimap, mouse/keyboard input and click-to-move orders (`Input`), the main loop and boot (`Main`). |
 | `css/style.css` | All styling. Parchment dialogs on a dark map, with gold accents. |
+| `build.js` | Produces the single-file artifact bundle (see Publishing). |
+| `tests/smoke.js` | Headless end-to-end smoke test (see Testing). |
 
 ### Key concepts
 
@@ -29,6 +40,7 @@ Guidance for working on **Conquista: The New World (1492–1600)**, a browser st
 - **Time** only advances when units move or the player takes timed actions (foraging, preaching, careening). `Game.advance(days)` eats provisions and triggers `monthly()` ticks, which run epidemics, colony income and chronicle events. The game ends in 1600.
 - **Sites**: settlements, ruins and the port are indexed by tile in `Game.siteAt`. Rebuild it with `Game.buildSiteIndex()` after loading.
 - **Saves**: `localStorage` key `conquista-save-v1`, holding JSON of `Game.s` plus a bit-packed explored mask. When you add a new state field, give it a default in `Game.load()` so older saves still work (see the `priests`, `converted` and `foodReadyDay` backfills).
+- **Storage can fail**: in the published artifact, `localStorage` may be empty or throw (private windows, previews, blocked site data). Wrap every read and write in try/catch, and the game must stay fully playable without saving. If saving fails, tell the player once in the log instead of crashing.
 
 ## Conventions
 
@@ -39,6 +51,37 @@ Guidance for working on **Conquista: The New World (1492–1600)**, a browser st
 - **Battle wording**: the user likes the battle log's tone and format ("**Round N** — 💥 Arquebus & Cannon Volley: X warriors fall, *panic spreads…*. You lose N soldiers…"). Keep the tactic names, descriptions and this line format when changing combat.
 - **Tone**: the game takes a historical, non-glorifying view. Disease, war deaths and forced labour are shown plainly, and the end screen tallies the human cost. Native peoples are described respectfully and accurately. Keep new content in that spirit.
 
+## Workflow
+
+- For changes that touch two or more files, propose a short plan before writing code and wait for approval.
+- One feature or fix per task. Don't bundle unrelated changes.
+- After each change: run the smoke test, fix any failures, then commit with a clear message.
+- After gameplay changes, rebuild the artifact with `node build.js`.
+- When a feature is finished, update **Current status** below.
+- If something in this file is out of date or wrong, say so and fix it.
+
 ## Publishing
 
-The playable claude.ai artifact is a single bundled HTML file: the `<body>` of `index.html` with `css/style.css` and the six JS files inlined in load order, without its own `<html>`/`<head>` tags. Regenerate it from the source files after gameplay changes rather than editing the bundle by hand.
+The playable claude.ai artifact is a single bundled HTML file: the `<body>` of `index.html` with `css/style.css` and the six JS files inlined in load order, without its own `<html>`/`<head>` tags. Generate it with `node build.js` (plain Node, no dependencies). Never edit the bundle by hand.
+
+## Current status
+
+> Keep this section short and current. It tells each new session what matters now.
+
+**Done**
+- Map, ship and party movement, fog of war, minimap
+- Sea and land events, discoveries, ruins and artifacts
+- Diplomacy, disease, conquest, friars, colonies
+- Turn-based battles with tactics and per-culture war styles
+- Sevilla port and treasury, scoring, end screen with human cost
+- Save/load
+
+**Next**
+1. Create `build.js` and switch Publishing to use it.
+2. Add the seeded RNG and the `?seed=` / `?noevents=` debug flags.
+3. Write `tests/smoke.js` using those flags.
+4. Tell the player once in the log when an autosave fails. (All `localStorage` access is already wrapped in try/catch; a failed autosave is currently silent.)
+5. New-player experience: a guided first voyage with hints in the log.
+
+**Known bugs**
+- (none recorded yet)
