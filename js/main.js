@@ -116,6 +116,12 @@ const Render = {
     const inView = (x, y) => x >= tx0 - 1 && x <= tx1 + 1 && y >= ty0 - 1 && y <= ty1 + 1;
     for (const r of s.ruins) if (inView(r.x, r.y) && Game.isExplored(r.x, r.y)) this.drawRuin(sx(r.x), sy(r.y), z, r);
     for (const st of s.settlements) if (inView(st.x, st.y) && Game.isExplored(st.x, st.y)) this.drawSettlement(sx(st.x), sy(st.y), z, st);
+    for (const w of Raids.list()) {
+      if (!inView(w.x, w.y) || !Game.isExplored(w.x, w.y)) continue;
+      const t = w.movedAt ? Math.min(1, (performance.now() - w.movedAt) / 450) : 1;
+      const wx = w.fx != null ? w.fx + (w.x - w.fx) * t : w.x, wy = w.fy != null ? w.fy + (w.y - w.fy) * t : w.y;
+      this.drawWarParty(sx(wx), sy(wy), z, w, t < 1);
+    }
     if (inView(s.port.x, s.port.y)) this.drawCastle(sx(s.port.x), sy(s.port.y), z, '#e8c040', '#b02020');
     // units
     const moving = (u) => !!((Input.anim && Input.anim.unit === u) || (Input.path.length && Game.active() === u));
@@ -161,6 +167,8 @@ const Render = {
     m.imageSmoothingEnabled = false;
     m.drawImage(this.fog, 0, 0);
     for (const st of s.settlements) if (st.conquered) { m.fillStyle = '#ffd040'; m.fillRect(st.x - 1, st.y - 1, 3, 3); }
+    m.fillStyle = '#ff2020';
+    for (const w of Raids.list()) if (Game.isExplored(w.x, w.y)) m.fillRect(w.x - 1, w.y - 1, 3, 3);
     const vw = this.cw / this.zoom, vh = this.ch / this.zoom;
     m.strokeStyle = '#fff'; m.lineWidth = 1;
     m.strokeRect(this.cx - vw / 2, this.cy - vh / 2, vw, vh);
@@ -469,6 +477,40 @@ const Render = {
     c.fillStyle = flag2; c.fillRect(0, -18, 7, 2); c.fillStyle = flag; c.fillRect(0, -16, 7, 2); c.fillStyle = flag2; c.fillRect(0, -14, 7, 1.5);
     c.restore();
   },
+  // a native war party: feathered warriors behind a war standard
+  drawWarParty(x, y, z, w, moving) {
+    const c = this.ctx, t = this.time;
+    const k = (z / 24) * 1.15;
+    c.save(); c.translate(x + z / 2, y + z / 2 + z * 0.2); c.scale(w.dir < 0 ? -k : k, k);
+    c.fillStyle = 'rgba(0,0,0,0.25)'; c.beginPath(); c.ellipse(0, 5, 20, 6, 0, 0, 7); c.fill();
+    c.strokeStyle = `rgba(230,60,50,${0.55 + Math.sin(t * 5) * 0.25})`; c.lineWidth = 1.4;
+    c.beginPath(); c.ellipse(0, 5, 22, 7, 0, 0, 7); c.stroke();
+    // feathered war standard
+    c.strokeStyle = '#4a3018'; c.lineWidth = 1; c.beginPath(); c.moveTo(-2, 6); c.lineTo(-2, -24); c.stroke();
+    const cols = ['#2e8b57', '#d4a017', '#c0392b', '#2e8b57', '#2e6b8a'];
+    for (let i = 0; i < 5; i++) {
+      const a = -Math.PI / 2 + (i - 2) * 0.35 + Math.sin(t * 3 + i) * 0.05;
+      c.strokeStyle = cols[i]; c.lineWidth = 1.6;
+      c.beginPath(); c.moveTo(-2, -24); c.lineTo(-2 + Math.cos(a) * 7, -24 + Math.sin(a) * 7); c.stroke();
+    }
+    c.fillStyle = '#d4a017'; c.beginPath(); c.arc(-2, -24, 1.8, 0, 7); c.fill();
+    const n = clamp(Math.ceil(w.warriors / 150), 3, 7);
+    const pos = [];
+    for (let i = 0; i < n; i++) pos.push({ x: -14 + (i % 4) * 8 + (Math.floor(i / 4) % 2) * 4, y: -3 + Math.floor(i / 4) * 6 });
+    pos.sort((a, b) => a.y - b.y).forEach((p, i) => {
+      const step = moving ? Math.sin(t * 12 + i * 1.9) : Math.sin(t * 2 + i) * 0.2;
+      this.figNative(c, p.x, p.y + 6, step, i, true);
+    });
+    c.restore();
+    if (z >= 14) {
+      c.save(); c.font = `bold ${clamp(z * 0.42, 9, 13)}px Georgia, serif`; c.textAlign = 'center';
+      c.lineWidth = 3; c.strokeStyle = 'rgba(30,10,5,0.8)'; c.fillStyle = '#ff9a8a';
+      const label = `${fmt(w.warriors)} warriors`;
+      c.strokeText(label, x + z / 2, y - z * 0.55); c.fillText(label, x + z / 2, y - z * 0.55);
+      c.restore();
+    }
+  },
+
   // a colony grows on the map as it is built up
   drawColony(x, y, z, st) {
     const c = this.ctx, b = st.buildings || {}, t = this.time;
@@ -603,6 +645,8 @@ const Input = {
     const lat = World.lat(t.y), lon = World.lon(t.x);
     let html = `<b>${TERRAIN[World.t(t.x, t.y)].name}</b> <small>${Math.abs(lat).toFixed(1)}°${lat >= 0 ? 'N' : 'S'} ${Math.abs(lon).toFixed(1)}°W</small>`;
     const site = Game.site(t.x, t.y);
+    const wp = Raids.at(t.x, t.y);
+    if (wp) html += `<br><span class="bad">⚔ <b>War party</b>: ${fmt(wp.warriors)} ${CULTURES[wp.culture].name} warriors marching on ${Raids.targetName(wp)}</span>`;
     if (site && site.kind === 'settlement') {
       const st = site.ref;
       const [l, cls] = Game.relLabel(Game.s.cultures[st.culture].rel);
@@ -707,6 +751,13 @@ const Input = {
 
   update(dt) {
     if (UI.open || !Game.s || Game.s.over) return;
+    if (Game.pendingBattle) {
+      const pb = Game.pendingBattle; Game.pendingBattle = null;
+      this.path = []; this.pending = null; this.anim = null;
+      Render.free = false;
+      Battle.start(pb);
+      return;
+    }
     if (this.anim) {
       this.anim.t += dt / this.anim.dur;
       if (this.anim.t < 1) return;

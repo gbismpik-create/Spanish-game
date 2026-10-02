@@ -73,6 +73,7 @@ const Battle = {
     };
     s.stats.battles++;
     s.cultures[opts.culture].met = true;
+    if (opts.intro) this.B.lines.push(`<span class="good">${opts.intro}</span>`);
     if (opts.ambush) {
       this.B.lines.push('<span class="bad">Arrows and darts rain down from cover before your men can form up!</span>');
       this.enemyStrike(1.2);
@@ -205,6 +206,7 @@ const Battle = {
     cs.shock = Math.max(0.15, cs.shock * 0.7); // they learn to fight horses and guns
     if (st) st.pop = Math.max(50, st.pop - B.kills);
     if (won) s.stats.won++;
+    if (B.onFinish) B.onFinish(won);
     let woundNote = '';
     if (B.wounded) woundNote = `<p>Of your ${B.wounded} wounded, ${recovered} recover${recovered === 1 ? 's' : ''} under the surgeon's care${woundDead ? ` and ${woundDead} die${woundDead === 1 ? 's' : ''} of ${B.style.woundDeath ? 'poisoned wounds' : 'their wounds'}${won ? '' : ' or are left behind'}` : ''}.</p>`;
     const summary = `Warriors killed: ${fmt(B.kills)} · Soldiers lost: ${B.lost}${B.captured ? ` (${B.captured} taken captive)` : ''}${B.horsesLost ? ` · Horses lost: ${B.horsesLost}` : ''}${B.alliesLost ? ` · Allies lost: ${fmt(B.alliesLost)}` : ''}`;

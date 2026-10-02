@@ -6,7 +6,7 @@ Guidance for working on **Conquista: The New World (1492–1600)**, a browser st
 
 - Plain HTML/CSS/JavaScript. There is no build step for development, no bundler, no npm dependencies and no framework.
 - Open `index.html` in a browser, or serve the folder: `npx http-server -p 8123 -c-1 .` and visit `http://localhost:8123`.
-- Scripts are classic `<script>` tags (not ES modules) loaded in a fixed order in `index.html`: `data.js` → `world.js` → `game.js` → `battle.js` → `ui.js` → `main.js`. Each file defines globals (`World`, `Game`, `Battle`, `UI`, `Render`, `Input`, `Main`) used by later files. Keep that order when adding files.
+- Scripts are classic `<script>` tags (not ES modules) loaded in a fixed order in `index.html`: `data.js` → `world.js` → `game.js` → `battle.js` → `raids.js` → `ui.js` → `main.js`. Each file defines globals (`World`, `Game`, `Battle`, `Raids`, `UI`, `Render`, `Input`, `Main`) used by later files. Keep that order when adding files.
 
 ## Testing
 
@@ -26,6 +26,7 @@ Guidance for working on **Conquista: The New World (1492–1600)**, a browser st
 | `js/world.js` | Tile map generated from `data.js` (`World.generate()`), terrain types `TT`, terrain info `TERRAIN`, foraging yields `FORAGE`, connected components, A* pathfinding (`World.findPath`), and the pre-rendered terrain canvas (`World.render()`). |
 | `js/game.js` | Game state `Game.s` and rules: new game setup, time and provisions (`advance`, `monthly`), ship and party movement (`shipStep`, `partyStep`), sea and land events, discoveries, ruins, diplomacy, disease, conquest, foraging, friars (`preach`), Sevilla's treasury, scoring, save/load. |
 | `js/battle.js` | Turn-based combat: `TACTICS`, per-culture `WAR_STYLES`, terrain effects (`battleGround`), wounds, fatigue, morale. |
+| `js/raids.js` | Native counter-attacks: war parties (`Game.s.warParties`) that spawn monthly, march across the map, attack the expedition or colonies; raid resolution against garrisons and walls; counter-offensives after a city falls; colonial revolts. Battles that start mid-move go through `Game.pendingBattle`, which `Input.update` starts once no dialog is open. |
 | `js/ui.js` | HUD, ship's log, toasts and banners, and every dialog: encounters, colonies, the Sevilla port, codex, atlas, help, end screen. |
 | `js/main.js` | Canvas rendering (`Render`), sprites, fog of war, minimap, mouse/keyboard input and click-to-move orders (`Input`), the main loop and boot (`Main`). |
 | `css/style.css` | All styling. Parchment dialogs on a dark map, with gold accents. |
@@ -62,7 +63,7 @@ Guidance for working on **Conquista: The New World (1492–1600)**, a browser st
 
 ## Publishing
 
-The playable claude.ai artifact is a single bundled HTML file: the `<body>` of `index.html` with `css/style.css` and the six JS files inlined in load order, without its own `<html>`/`<head>` tags. Generate it with `node build.js` (plain Node, no dependencies). Never edit the bundle by hand.
+The playable claude.ai artifact is a single bundled HTML file: the `<body>` of `index.html` with `css/style.css` and the seven JS files inlined in load order, without its own `<html>`/`<head>` tags. Generate it with `node build.js` (plain Node, no dependencies). Never edit the bundle by hand.
 
 ## Current status
 
@@ -74,6 +75,7 @@ The playable claude.ai artifact is a single bundled HTML file: the `<body>` of `
 - Sea and land events, discoveries, ruins and artifacts
 - Diplomacy, disease, conquest, friars
 - Colony city screen (Grepolis-style): 8 buildings with levels 1–5, a 2-slot construction queue paid in gold and game time, monthly production, garrisons; colonies grow on the map
+- Native counter-attacks: visible war parties, raids on colonies (garrison and walls auto-resolve, or the player leads the defence), counter-offensives, revolts
 - After a conquest: press warriors into service as auxiliaries (permanent, paid, take berths), garrison them, or release them
 - Turn-based battles with tactics and per-culture war styles
 - Sevilla port and treasury, scoring, end screen with human cost

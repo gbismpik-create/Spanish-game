@@ -294,6 +294,8 @@ const UI = {
         <div>Treasury: <b>${fmt(st.treasury)}</b> gold</div><div>Granary: <b>${fmt(st.store)}</b> provisions</div>
         <div>Garrison: <b>${g.soldiers}</b> soldiers, <b>${fmt(g.aux)}</b> auxiliaries</div><div>Defence strength: <b>${fmt(strength)}</b>${b.walls ? ` (walls +${b.walls * 25}%)` : ''}</div>
       </div>
+      ${Raids.threatsTo(st).map((w) => `<p class="bad">⚔ A war party of <b>${fmt(w.warriors)}</b> ${CULTURES[w.culture].name} warriors is marching on ${st.name}!</p>`).join('')}
+      ${Raids.revoltRisk(st) > 0 ? `<p class="warn">Unrest: the garrison is too weak to overawe the townspeople. Risk of revolt each month: <b>${Math.round(Raids.revoltRisk(st) * 100)}%</b>. Mines raise it; a church, converts and a stronger garrison lower it.</p>` : ''}
       <h3>Construction</h3><div class="queue">${queue}</div>
       <h3>Buildings</h3><div class="bgrid">${cards}</div>
       <h3>Services</h3><div class="svc">${svc.join('')}</div>
@@ -419,6 +421,7 @@ const UI = {
       <h3>Battle</h3>
       <ul><li>Choose a tactic each round. Guns and horses cause panic among peoples who have never seen them, but each battle teaches them to fight back.</li>
       <li>Conquered settlements become colonies. Open a colony to build and upgrade its Cabildo, barracks, walls, church, fields, mines, harbour and stables (levels 1–5). Construction takes gold and time and continues while you are away.</li>
+      <li>Peoples you anger send <b>war parties</b> against your expedition and colonies. You can see them on the map and attack them first. Raids on colonies are fought by the garrison and walls; if you are there, you lead the defence. Losing a city can trigger a counter-offensive, and colonies with weak garrisons, harsh mines and few converts may revolt.</li>
       <li>After a conquest, choose what to do with the defeated warriors: press them into service as <b>auxiliaries</b> who stay with you, make them the city's garrison, or release them.</li>
       <li>Battles depend on the ground: horses rule open plains but flounder in jungle and mountains, and rain fouls powder. Your men tire as a fight drags on. Wounded men may recover afterwards. Each people fights its own way: Aztecs take captives, Inca slingers strike from afar, Caribs use poisoned arrows, and Mapuche pikemen stop cavalry.</li></ul>
       <h3>Food</h3>

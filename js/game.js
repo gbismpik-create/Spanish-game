@@ -187,6 +187,7 @@ const Game = {
       if (s.soldiers <= 0) return this.gameOver('Starvation', 'The last of your men perished from hunger in an unknown land.');
     }
     this.tickBuilds();
+    Raids.advance(days);
     const after = this.date();
     const m0 = before.getUTCFullYear() * 12 + before.getUTCMonth();
     const m1 = after.getUTCFullYear() * 12 + after.getUTCMonth();
@@ -240,6 +241,7 @@ const Game = {
         this.log(`You cannot pay your auxiliaries. ${d} of them desert.`, 'warn');
       }
     }
+    Raids.monthly();
     // relations slowly cool towards neutral
     for (const c of Object.values(s.cultures)) if (c.rel < -20) c.rel = Math.min(-20, c.rel + 0.5);
   },
@@ -387,6 +389,12 @@ const Game = {
     if (site && site.kind === 'settlement' && !site.ref.conquered) { this.interact(site, false); return false; }
     if (site && site.kind === 'port') return false;
     if (!World.landOK(nx, ny)) return false;
+    const wp = Raids.at(nx, ny);
+    if (wp) {
+      Raids.remove(wp);
+      this.pendingBattle = { title: `You attack a ${CULTURES[wp.culture].name} war party`, culture: wp.culture, warriors: wp.warriors };
+      return false;
+    }
     const dx = nx - p.x;
     if (dx) p.dir = Math.sign(dx);
     const days = this.landCost(nx, ny) * (dx && ny !== p.y ? 1.414 : 1);
@@ -394,7 +402,7 @@ const Game = {
     s.stats.tiles++;
     this.reveal(nx, ny, World.t(nx, ny) === TT.MOUNTAIN ? 5 : 4);
     this.advance(days);
-    if (s.over) return false;
+    if (s.over || this.pendingBattle) return false;
     // living off the land as they march
     this.addFood(this.dailyFood() * days * (FORAGE[World.t(nx, ny)] || 0) * 0.9);
     this.checkDiscoveries(nx, ny);
@@ -423,7 +431,7 @@ const Game = {
       if (rel > -30) continue;
       const d = Math.hypot(st.x - x, st.y - y);
       if (d > 5) continue;
-      const p = rel <= -60 ? 0.1 : 0.05;
+      const p = rel <= -60 ? 0.05 : 0.025;
       if (Math.random() < p) {
         const w = Math.max(20, Math.round(this.warriors(st) * rand(0.12, 0.3)));
         Battle.start({ title: `Ambush by ${CULTURES[st.culture].name} warriors`, culture: st.culture, warriors: w, settlement: st, ambush: true });
@@ -629,6 +637,7 @@ const Game = {
     this.ensureColony(st);
     html += `<p>${st.name} becomes a Spanish colony. Build it up from its city screen: walls, barracks, church, fields, mines and more.</p>`;
     // the surviving warriors
+    Raids.counterOffensive(st);
     const w = Math.max(5, Math.round(this.warriors(st) * 0.5));
     const room = this.ship().men - s.soldiers - s.auxiliaries;
     html += `<h3>The defeated warriors</h3><p>About <b>${fmt(w)}</b> warriors have laid down their arms. What will you do with them?</p>`;
