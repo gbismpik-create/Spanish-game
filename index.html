@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Conquista: The New World</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E⛵%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <canvas id="map"></canvas>
+
+  <div id="game-ui" class="hidden">
+    <div id="hud"></div>
+    <div id="mode"></div>
+    <div id="log"><div class="log-title">Ship's Log</div><div id="log-lines"></div></div>
+    <canvas id="minimap" title="Click to look elsewhere"></canvas>
+    <div id="actions">
+      <button id="btn-land" title="Land an expedition / re-embark (L)">🚣 Land</button>
+      <button id="btn-careen" title="Beach the ship to repair her (20 days)">🔧 Careen</button>
+      <button id="btn-center" title="Centre on your expedition (Space)">🎯</button>
+      <button id="btn-zin" title="Zoom in">＋</button>
+      <button id="btn-zout" title="Zoom out">－</button>
+      <button id="btn-codex" title="Artifacts">📜 Codex</button>
+      <button id="btn-disc" title="Discoveries and peoples">🧭 Atlas</button>
+      <button id="btn-log" title="Show/hide the log">📖</button>
+      <button id="btn-save" title="Save game">💾</button>
+      <button id="btn-help" title="How to play">❓</button>
+    </div>
+    <div id="banner"></div>
+    <div id="toasts"></div>
+  </div>
+
+  <div id="tooltip"></div>
+
+  <div id="title-screen">
+    <div class="title-box">
+      <div class="title-cross">✠</div>
+      <h1>Conquista</h1>
+      <h2>The New World · 1492–1600</h2>
+      <p class="intro">Sail west from Sevilla across the Ocean Sea. Discover unknown coasts and islands, meet the peoples of the Americas, fight or ally with them, uncover the treasures of ancient ruins — and see the terrible cost of conquest.</p>
+      <div id="loading">Charting the New World…</div>
+      <div id="title-menu" class="hidden">
+        <label>Your name, Captain: <input id="captain" maxlength="24" placeholder="Rodrigo de Triana"></label>
+        <div class="title-buttons">
+          <button id="btn-new">⚓ New Expedition</button>
+          <button id="btn-continue">📜 Continue</button>
+          <button id="btn-howto">❓ How to play</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-bg"><div id="modal"></div></div>
+
+  <script src="js/data.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/battle.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

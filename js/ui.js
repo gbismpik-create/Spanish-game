@@ -1,0 +1,345 @@
+'use strict';
+// ---------------------------------------------------------------------------
+// HUD, log, dialogs
+// ---------------------------------------------------------------------------
+
+const $ = (sel) => document.querySelector(sel);
+
+const UI = {
+  open: false,
+
+  init() {
+    $('#btn-land').addEventListener('click', () => Input.landOrEmbark());
+    $('#btn-center').addEventListener('click', () => { Render.free = false; });
+    $('#btn-codex').addEventListener('click', () => this.codex());
+    $('#btn-disc').addEventListener('click', () => this.discoveriesDialog());
+    $('#btn-careen').addEventListener('click', () => this.careen());
+    $('#btn-help').addEventListener('click', () => this.help());
+    $('#btn-save').addEventListener('click', () => Game.save(false));
+    $('#btn-zin').addEventListener('click', () => Render.zoomBy(1.25));
+    $('#btn-zout').addEventListener('click', () => Render.zoomBy(0.8));
+    $('#btn-log').addEventListener('click', () => $('#log').classList.toggle('hidden'));
+    $('#modal-bg').addEventListener('click', (e) => { if (e.target.id === 'modal-bg' && this.closable) this.close(); });
+  },
+
+  refresh() {
+    const s = Game.s;
+    if (!s) return;
+    const sh = Game.ship();
+    const pos = Game.active();
+    const wind = Game.windAt(World.lat(pos.y));
+    const items = [
+      ['📅', Game.dateStr(), Game.monarch()],
+      ['🎖️', `${Game.title()} ${s.captain}`, `Fame ${fmt(s.fame)}`],
+      ['💰', fmt(s.ducats), 'Ducats (your money)'],
+      ['🪙', fmt(s.treasure), 'Treasure carried (gold & silver). Deliver to Sevilla for fame.'],
+      ['⚔️', s.soldiers, `Soldiers (ship holds ${sh.men})`],
+      ['🐎', s.horses, 'Horses'],
+      ['🔫', s.arquebuses, 'Arquebuses'],
+      ['💣', s.cannons, `Cannon (max ${sh.cannons})`],
+      ['🏹', fmt(s.allies), 'Native allies (leave when you re-embark)'],
+      ['🍖', `${fmt(s.food)}`, `Provisions (${Math.floor(s.food / (1 + s.soldiers / 20 + s.allies / 40))} days)`],
+      ['📦', s.goods, 'Trade goods: beads, cloth, iron tools'],
+      ['⚓', `${s.hull}/${sh.hull}`, `${sh.name} hull`],
+      ['⭐', fmt(s.fame), 'Fame'],
+    ];
+    $('#hud').innerHTML = items.map(([i, v, t]) => `<div class="hud-item${(i === '🍖' && s.food < 60) || (i === '⚓' && s.hull < 35) ? ' alert' : ''}" title="${t}"><span>${i}</span>${v}</div>`).join('')
+      + `<div class="hud-item wind" title="Wind at your latitude">🌬️ ${wind.name} ${wind.dir < 0 ? '←' : wind.dir > 0 ? '→' : '·'}</div>`;
+    $('#btn-land').textContent = s.party ? '⛵ Embark' : '🚣 Land';
+    $('#btn-careen').style.display = (!s.party && s.hull < sh.hull * 0.6) ? '' : 'none';
+    $('#mode').textContent = s.party ? 'Expedition on land — click to march, click the ship to re-embark' : 'At sea — click to sail, click land to send an expedition ashore';
+  },
+
+  addLog(msg, cls) {
+    const el = document.createElement('div');
+    el.className = 'log-line ' + cls;
+    el.innerHTML = msg;
+    const log = $('#log-lines');
+    log.appendChild(el);
+    while (log.children.length > 80) log.removeChild(log.firstChild);
+    log.scrollTop = log.scrollHeight;
+  },
+  rebuildLog() {
+    $('#log-lines').innerHTML = '';
+    for (const l of Game.s.log) this.addLog(l.msg, l.cls);
+  },
+
+  toast(msg) {
+    const t = document.createElement('div');
+    t.className = 'toast'; t.innerHTML = msg;
+    $('#toasts').appendChild(t);
+    setTimeout(() => t.classList.add('fade'), 3200);
+    setTimeout(() => t.remove(), 4000);
+  },
+  banner(title, text) {
+    const b = $('#banner');
+    b.innerHTML = `<div class="b-title">${title}</div><div class="b-text">${text}</div>`;
+    b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
+  },
+
+  dialog(title, html, buttons = [], noBgClose = false, actions = {}) {
+    this.open = true;
+    this.closable = !noBgClose;
+    Input.stop();
+    const m = $('#modal');
+    m.innerHTML = `<h2>${title}</h2><div class="modal-body">${html}</div><div class="modal-buttons"></div>`;
+    const bar = m.querySelector('.modal-buttons');
+    for (const [label, fn, disabled, tip] of buttons) {
+      const b = document.createElement('button');
+      b.innerHTML = label; b.disabled = !!disabled;
+      if (tip) b.title = tip;
+      b.addEventListener('click', fn);
+      bar.appendChild(b);
+    }
+    m.querySelectorAll('[data-act]').forEach((el) => el.addEventListener('click', () => actions[el.dataset.act] && actions[el.dataset.act]()));
+    $('#modal-bg').classList.add('show');
+  },
+  close() {
+    this.open = false;
+    $('#modal-bg').classList.remove('show');
+    this.refresh();
+  },
+
+  // ------------------------------------------------------------ encounters
+  encounterDialog(st) {
+    const s = Game.s, c = CULTURES[st.culture], cs = s.cultures[st.culture];
+    const [rl, rc] = Game.relLabel(cs.rel);
+    const T = SETTLEMENT_TYPES[st.type];
+    const W = Game.warriors(st);
+    const ratio = Game.strengthRatio(st);
+    const odds = ratio > 2 ? 'Your captains are confident.' : ratio > 1 ? 'A hard fight, but winnable.' : ratio > 0.5 ? 'Your captains urge caution.' : 'Attacking would be suicide without allies.';
+    let dis = '';
+    if (st.infection) dis = `<p class="disease">☠️ ${DISEASES.find((d) => d.id === st.infection.d).name} is ravaging the ${T.label.toLowerCase()}. The sick lie untended in the streets.</p>`;
+    else if (st.pop < st.pop0 * 0.8) dis = `<p class="disease">The ${T.label.toLowerCase()} is half-empty — epidemics have killed ${fmt(st.pop0 - st.pop)} people.</p>`;
+    const wealth = st.gold > 5000 ? 'immense wealth' : st.gold > 1500 ? 'great wealth' : st.gold > 400 ? 'some gold' : 'little gold';
+    const hostile = cs.rel <= -60;
+    const html = `
+      <p class="sub">${T.label} of the ${c.name}</p>
+      <p class="flavor">${c.desc}</p>
+      <div class="stats">
+        <div>Population: <b>${fmt(st.pop)}</b></div><div>Warriors: <b>~${fmt(Math.round(W / 50) * 50 || W)}</b></div>
+        <div>Attitude: <b class="${rc}">${rl}</b> (${Math.round(cs.rel)})</div><div>Rumoured: <b>${wealth}</b></div>
+      </div>
+      ${dis}
+      <p class="odds">${odds}</p>
+      ${hostile ? '<p class="bad"><b>The warriors rush out to attack you!</b></p>' : ''}`;
+    const actions = [];
+    const enc = () => this.encounterDialog(st);
+    if (hostile) {
+      actions.push(['⚔️ Fight', () => Battle.start({ title: `Battle at ${st.name}`, culture: st.culture, warriors: W, settlement: st })]);
+      actions.push(['🏃 Flee', () => {
+        const lost = Math.max(1, Math.round(s.soldiers * 0.05));
+        s.soldiers -= lost; s.stats.soldiersLost += lost; Game.clampArmy();
+        Game.log(`You flee from ${st.name}, losing ${lost} men.`, 'bad');
+        if (s.soldiers <= 0) return Game.gameOver('Annihilated', 'None of your men escaped.');
+        this.close();
+      }]);
+      this.dialog(`${st.name}`, html, actions, true);
+      return;
+    }
+    actions.push(['🎁 Offer gifts (10 goods)', () => {
+      s.goods -= 10; Game.changeRel(st.culture, 12);
+      let msg = `The ${c.name} accept your gifts. Relations improve.`;
+      const r = Math.random() < 0.6 ? Game.rumor(st) : null;
+      if (r) msg += ' ' + r;
+      Game.log(msg, 'good'); this.toast(msg); enc();
+    }, s.goods < 10]);
+    actions.push(['🤝 Trade goods for gold', () => {
+      s.goods -= 10;
+      const g = Math.min(st.gold, Math.round(rand(15, 30) * ({ village: 1, town: 2, city: 3, capital: 4 })[st.type]));
+      st.gold -= g; s.treasure += g; Game.changeRel(st.culture, 4);
+      Game.log(`Traded 10 goods at ${st.name} for ${g} in gold.`, 'good'); enc();
+    }, s.goods < 10 || cs.rel < -20 || st.gold <= 0, 'Requires 10 trade goods and a non-hostile attitude']);
+    actions.push(['🌽 Trade for provisions', () => {
+      s.goods -= 5;
+      const f = Math.min(Game.ship().food - s.food, randi(50, 90));
+      s.food += Math.max(0, f); Game.changeRel(st.culture, 2);
+      Game.log(`Traded 5 goods at ${st.name} for ${Math.max(0, f)} provisions of maize, cassava and fish.`, 'good'); enc();
+    }, s.goods < 5 || cs.rel < -20 || s.food >= Game.ship().food]);
+    const allyReady = s.day >= st.allyReadyDay;
+    const hasEnemy = c.rivals.length > 0;
+    actions.push(['🏹 Ask for warriors', () => {
+      const n = Math.round(W * (hasEnemy ? 0.6 : 0.25));
+      s.allies += n; st.allyReadyDay = s.day + 365;
+      Game.log(`${fmt(n)} ${c.name} warriors join your expedition${hasEnemy && c.rivals.length ? ', eager to fight their old enemies' : ''}.`, 'good');
+      enc();
+    }, cs.rel < 40 || !allyReady || !s.party, !s.party ? 'Allies only march with an expedition on land' : 'Requires Friendly attitude (40+), once per year']);
+    actions.push(['📜 Demand tribute', () => {
+      const p = clamp(ratio - 0.3, 0.05, 0.95);
+      if (Math.random() < p) {
+        const g = Math.round(st.gold * 0.35); st.gold -= g; s.treasure += g;
+        Game.changeRel(st.culture, -20);
+        Game.log(`Intimidated, ${st.name} hands over ${g} in gold. They will not forget this.`, 'warn'); enc();
+      } else {
+        Game.changeRel(st.culture, -25);
+        Game.log(`${st.name} refuses your demands and attacks!`, 'bad');
+        Battle.start({ title: `Battle at ${st.name}`, culture: st.culture, warriors: W, settlement: st });
+      }
+    }, false, `Chance of success: ${Math.round(clamp(ratio - 0.3, 0.05, 0.95) * 100)}%`]);
+    actions.push(['⚔️ Attack', () => {
+      Game.attacked(st.culture);
+      Game.log(`You attack ${st.name}.`, 'warn');
+      Battle.start({ title: `Assault on ${st.name}`, culture: st.culture, warriors: W, settlement: st });
+    }]);
+    actions.push(['Leave', () => this.close()]);
+    this.dialog(`${st.name}`, html, actions);
+  },
+
+  colonyDialog(st, fromShip) {
+    const s = Game.s;
+    const coastal = !!Game.adjacentWater(st.x, st.y);
+    const shipHere = Math.abs(s.ship.x - st.x) <= 1 && Math.abs(s.ship.y - st.y) <= 1;
+    const sh = Game.ship();
+    const html = `<p class="sub">Spanish colony · formerly a ${SETTLEMENT_TYPES[st.type].label.toLowerCase()} of the ${CULTURES[st.culture].name}</p>
+      <div class="stats"><div>Population: <b>${fmt(st.pop)}</b></div><div>Tribute collected: <b>${fmt(st.treasury)}</b></div>
+      <div>Settlers willing to join: <b>${st.recruits}</b></div><div>Port: <b>${coastal ? 'yes' : 'no'}</b></div></div>
+      <p class="flavor">Encomenderos force the native people to labour in fields and mines. The friars complain to the Crown.</p>`;
+    const re = () => this.colonyDialog(st, fromShip);
+    const actions = [
+      [`🪙 Collect tribute (${fmt(st.treasury)})`, () => { s.treasure += st.treasury; Game.log(`Collected ${fmt(st.treasury)} tribute at ${st.name}.`, 'good'); st.treasury = 0; re(); }, st.treasury <= 0],
+      ['🍖 Buy 100 provisions (150)', () => { if (Game.spend(150)) s.food = Math.min(sh.food, s.food + 100); re(); }, !Game.canAfford(150) || s.food >= sh.food],
+      [`⚔️ Recruit 5 settlers (175)`, () => { if (Game.spend(175)) { s.soldiers += 5; st.recruits -= 5; } re(); }, st.recruits < 5 || !Game.canAfford(175) || s.soldiers + 5 > sh.men],
+      ['🔧 Repair ship (3/pt)', () => {
+        const need = sh.hull - s.hull; const afford = Math.floor((s.ducats + s.treasure) / 3);
+        const n = Math.min(need, afford); if (n > 0 && Game.spend(n * 3)) { s.hull += n; Game.log(`Ship repaired at ${st.name}.`, 'good'); } re();
+      }, !(coastal && shipHere) || s.hull >= sh.hull, 'Ship must be anchored next to a coastal colony'],
+      ['Leave', () => this.close()],
+    ];
+    this.dialog(`⛪ ${st.name}`, html, actions);
+  },
+
+  // ------------------------------------------------------------ Sevilla
+  portDialog() {
+    const s = Game.s, sh = Game.ship();
+    const re = () => this.portDialog();
+    const buy = (what, n, price, cap) => {
+      n = Math.max(0, Math.min(n, cap));
+      if (n <= 0) return;
+      const cost = n * price;
+      if (!Game.spend(cost)) { this.toast('Not enough money.'); return; }
+      s[what] += n; re();
+    };
+    const row = (label, what, price, opts, cap, note) => `<div class="shop-row"><span class="lbl">${label} <small>${price} each${note ? ' · ' + note : ''}</small></span>
+      <span class="have">${fmt(s[what])}</span>${opts.map((n) => `<button data-act="${what}-${n}" ${cap <= 0 || !Game.canAfford(price) ? 'disabled' : ''}>+${n === 9999 ? 'Max' : n}</button>`).join('')}</div>`;
+    const caps = {
+      soldiers: sh.men - s.soldiers,
+      horses: Math.min(Math.floor(sh.men / 4), s.soldiers) - s.horses,
+      arquebuses: s.soldiers - s.arquebuses,
+      cannons: sh.cannons - s.cannons,
+      food: sh.food - s.food,
+      goods: 200 - s.goods,
+    };
+    const prices = { soldiers: PRICES.soldier, horses: PRICES.horse, arquebuses: PRICES.arquebus, cannons: PRICES.cannon, food: PRICES.food, goods: PRICES.goods };
+    const opts = { soldiers: [5, 20], horses: [1, 5], arquebuses: [5, 20], cannons: [1], food: [100, 9999], goods: [20, 9999] };
+    const actions = {};
+    for (const [w, list] of Object.entries(opts)) for (const n of list) actions[`${w}-${n}`] = () => buy(w, n === 9999 ? Math.floor((s.ducats + s.treasure) / prices[w]) : n, prices[w], caps[w]);
+    const repairCost = (sh.hull - s.hull) * PRICES.repair;
+    actions.repair = () => { const n = Math.min(sh.hull - s.hull, Math.floor((s.ducats + s.treasure) / PRICES.repair)); if (n > 0 && Game.spend(n * PRICES.repair)) s.hull += n; re(); };
+    actions.deliver = () => { Game.deliverTreasure(); re(); };
+    const shipRows = Object.entries(SHIPS).filter(([k]) => k !== s.shipType).map(([k, v]) => {
+      const cost = Math.max(0, v.cost - Math.round(sh.cost / 2));
+      actions['ship-' + k] = () => {
+        if (s.soldiers > v.men) { this.toast(`Too many soldiers for a ${v.name}.`); return; }
+        if (!Game.spend(cost)) { this.toast('Not enough money.'); return; }
+        s.shipType = k; s.hull = v.hull; s.food = Math.min(s.food, v.food); s.cannons = Math.min(s.cannons, v.cannons);
+        Game.log(`You take command of a ${v.name}.`, 'good'); re();
+      };
+      return `<div class="shop-row"><span class="lbl">${v.name} <small>${v.men} men · ${v.food} provisions · hull ${v.hull} · ${v.cannons} cannon · speed ${Math.round(v.speed * 100)}%</small></span><button data-act="ship-${k}" ${Game.canAfford(cost) ? '' : 'disabled'}>Buy (${fmt(cost)})</button></div>`;
+    }).join('');
+    actions.retire = () => {
+      this.dialog('Retire?', `<p>Retire to your estates and end the game with a score of <b>${fmt(Game.score())}</b>?</p>`, [['Retire', () => { this.close(); Game.endGame(`${Game.title()} ${s.captain} retires to an estate in Castile.`); }], ['Not yet', () => this.portDialog()]]);
+    };
+    const html = `<p class="sub">Casa de Contratación · Reign of ${Game.monarch()}</p>
+      <div class="section"><h3>Royal Treasury</h3>
+        <div class="shop-row"><span class="lbl">Treasure in your hold <small>The Crown takes the royal fifth (20%) — and rewards you with fame</small></span><span class="have">${fmt(s.treasure)}</span><button data-act="deliver" ${s.treasure > 0 ? '' : 'disabled'}>Deliver</button></div>
+        <div class="small">Money: ${fmt(s.ducats)} ducats. Purchases use ducats first, then treasure. Royal fifth paid so far: ${fmt(s.crownGold)}.</div></div>
+      <div class="section"><h3>Recruit & Arm</h3>
+        ${row('⚔️ Soldiers', 'soldiers', prices.soldiers, opts.soldiers, caps.soldiers, `ship holds ${sh.men}`)}
+        ${row('🐎 Horses', 'horses', prices.horses, opts.horses, caps.horses, 'max ¼ of ship berths')}
+        ${row('🔫 Arquebuses', 'arquebuses', prices.arquebuses, opts.arquebuses, caps.arquebuses, 'one per soldier')}
+        ${row('💣 Cannon', 'cannons', prices.cannons, opts.cannons, caps.cannons, `max ${sh.cannons}`)}</div>
+      <div class="section"><h3>Market</h3>
+        ${row('🍖 Provisions', 'food', prices.food, opts.food, caps.food, `hold ${sh.food}`)}
+        ${row('📦 Trade goods', 'goods', prices.goods, opts.goods, caps.goods, 'max 200')}</div>
+      <div class="section"><h3>Shipyard</h3>
+        <div class="shop-row"><span class="lbl">🔧 Repair the ${sh.name} <small>hull ${s.hull}/${sh.hull}</small></span><button data-act="repair" ${s.hull < sh.hull && Game.canAfford(PRICES.repair) ? '' : 'disabled'}>Repair (${fmt(repairCost)})</button></div>
+        ${shipRows}<div class="small">Your current ship is traded in for half its value.</div></div>`;
+    this.dialog('🏰 Sevilla', html, [['🎖️ Retire', actions.retire], ['Set sail', () => { Game.save(true); this.close(); }]], false, actions);
+    this.refresh();
+  },
+
+  careen() {
+    const s = Game.s, sh = Game.ship();
+    if (s.party) return;
+    let nearLand = false;
+    for (const [dx, dy] of DIRS8) if (World.landOK(s.ship.x + dx, s.ship.y + dy)) nearLand = true;
+    if (!nearLand) { this.toast('You must be next to a New World shore to careen the ship.'); return; }
+    const gain = Math.min(sh.hull - s.hull, Math.round(sh.hull * 0.3));
+    Game.advance(20);
+    if (Game.s.over) return;
+    s.hull += gain;
+    Game.log(`You beach the ship and scrape and patch her hull for 20 days (+${gain} hull).`, 'good');
+    this.refresh();
+  },
+
+  // ------------------------------------------------------------ info screens
+  codex() {
+    const s = Game.s;
+    const ids = Object.keys(ARTIFACTS);
+    const html = `<p class="sub">${s.artifacts.length} of ${ids.length} artifacts collected</p><div class="codex">${ids.map((id) => {
+      const a = ARTIFACTS[id], has = s.artifacts.includes(id);
+      return has ? `<div class="card"><div class="big-icon">${a.icon}</div><b>${a.name}</b><p>${a.desc}</p><small>Fame ${a.fame} · worth ${a.value}</small></div>`
+        : '<div class="card unknown"><div class="big-icon">❔</div><b>Undiscovered</b><p>Somewhere in the ruins and cities of the Americas…</p></div>';
+    }).join('')}</div>`;
+    this.dialog('📜 Codex of Artifacts', html, [['Close', () => this.close()]]);
+  },
+  discoveriesDialog() {
+    const s = Game.s;
+    const html = `<p class="sub">${s.discoveries.length} of ${DISCOVERIES.length} discoveries</p><div class="disc-list">${DISCOVERIES.map(([id, name, , , , fame, text]) => s.discoveries.includes(id)
+      ? `<div class="disc done">🧭 <b>${name}</b> <small>+${fame}</small><br><i>${text}</i></div>` : '<div class="disc">❔ <i>Undiscovered</i></div>').join('')}</div>
+      <h3>Peoples met</h3><div class="disc-list">${Object.entries(s.cultures).filter(([, c]) => c.met).map(([id, c]) => {
+        const [l, cls] = Game.relLabel(c.rel);
+        return `<div class="disc done"><b>${CULTURES[id].name}</b> — <span class="${cls}">${l}</span><br><small>${CULTURES[id].desc}</small></div>`;
+      }).join('') || '<i>None yet.</i>'}</div>`;
+    this.dialog('🧭 Discoveries & Peoples', html, [['Close', () => this.close()]]);
+  },
+  help() {
+    const html = `
+      <p><b>The year is 1492.</b> You command a small expedition sailing from Sevilla into the unknown west. Explore, conquer, find ancient artifacts and win fame before the century ends in 1600.</p>
+      <h3>Controls</h3>
+      <ul><li><b>Click / tap</b> on the map to sail or march there. Drag to pan, scroll or +/− to zoom.</li>
+      <li><b>Arrow keys / WASD</b> move one tile (Q/E/Z/C diagonals). <b>Space</b> recentres. <b>L</b> lands or re-embarks.</li>
+      <li>Click a <b>land tile</b> while at sea to sail to the nearest shore and send an expedition ashore. Click your <b>ship</b> to re-embark.</li></ul>
+      <h3>Sailing</h3>
+      <ul><li>Winds matter: the <b>trade winds</b> push you west between 8° and 30° N; the <b>westerlies</b> carry you home further north. This is the historical <i>volta do mar</i>.</li>
+      <li>Watch your <b>provisions</b>. Starving men die. Buy food in Sevilla, trade with natives, or at your colonies.</li>
+      <li>Hurricanes strike the Caribbean from August to October. Repair in Sevilla, at coastal colonies, or <b>careen</b> on any New World beach.</li></ul>
+      <h3>Peoples</h3>
+      <ul><li>Each people has an attitude toward you. Gifts and trade improve it; attacks and tribute make enemies — and make their rivals your friends.</li>
+      <li>Friendly peoples may lend <b>warriors</b>. Like Cortés with the Tlaxcalteca, you cannot topple an empire without native allies.</li>
+      <li><b>Disease</b>: your men unknowingly carry smallpox, measles and typhus. Epidemics spread from town to town ahead of you, killing a large share of the population. This was the deadliest force of the conquest.</li></ul>
+      <h3>Battle</h3>
+      <ul><li>Choose a tactic each round. Guns and horses cause panic among peoples who have never seen them, but each battle teaches them to fight back.</li>
+      <li>Conquered settlements become colonies that pay tribute.</li></ul>
+      <h3>Fame</h3>
+      <p>Fame comes from discoveries, artifacts, conquests and the royal fifth of treasure delivered to Sevilla. Titles: Hidalgo → Capitán → Adelantado → Gobernador → Marqués → Virrey.</p>`;
+    this.dialog('❓ How to play', html, [['Close', () => this.close()]]);
+  },
+
+  endScreen(cause, text, peaceful) {
+    const s = Game.s;
+    this.refresh();
+    const met = Object.values(s.cultures).filter((c) => c.met).length;
+    const html = `<p class="flavor">${text}</p>
+      <div class="stats">
+        <div>Final title: <b>${Game.title()}</b></div><div>Score: <b>${fmt(Game.score())}</b></div>
+        <div>Fame: <b>${fmt(s.fame)}</b></div><div>Ducats: <b>${fmt(s.ducats)}</b></div>
+        <div>Discoveries: <b>${s.discoveries.length}/${DISCOVERIES.length}</b></div><div>Artifacts: <b>${s.artifacts.length}/${Object.keys(ARTIFACTS).length}</b></div>
+        <div>Settlements conquered: <b>${s.stats.conquered}</b></div><div>Battles won: <b>${s.stats.won}/${s.stats.battles}</b></div>
+        <div>Peoples met: <b>${met}</b></div><div>Spaniards lost: <b>${fmt(s.stats.soldiersLost)}</b></div>
+        <div>Native people killed in war: <b>${fmt(s.stats.warDeaths)}</b></div><div>Native people killed by epidemics: <b>${fmt(s.stats.diseaseDeaths)}</b></div>
+      </div>
+      <p class="history">Historians estimate that the Indigenous population of the Americas fell by as much as 90% in the century after 1492 — mostly from Old World diseases such as smallpox, measles and typhus, compounded by war, forced labour and famine. Many of the peoples in this game survive today: millions of people speak Maya languages, Quechua, Guaraní, Nahuatl, Mapudungun and Aymara.</p>`;
+    this.dialog(peaceful ? '🏰 The End' : `☠️ ${cause}`, html, [['New game', () => location.reload()]], true);
+  },
+};
