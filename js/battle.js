@@ -87,9 +87,12 @@ const Battle = {
     let pts = B.W * 0.03 * B.cul.t * B.defense * B.ground.enemy * rand(0.7, 1.3) * mult;
     if (sty.fresh && B.round > 2) pts *= 1.1; // fresh squadrons rotate in
     let soldierPts = pts;
-    if (s.allies > 0) {
-      const al = Math.min(s.allies, Math.round(pts * 0.7));
-      s.allies -= al; B.alliesLost += al;
+    const natives = s.allies + s.auxiliaries;
+    if (natives > 0) {
+      const al = Math.min(natives, Math.round(pts * 0.7));
+      const fromAllies = Math.min(s.allies, Math.round(al * (s.allies / natives)));
+      s.allies -= fromAllies; s.auxiliaries -= al - fromAllies;
+      B.alliesLost += al;
       soldierPts = pts * 0.3;
     }
     // steel armour turns most blows: only some hits strike home
@@ -118,7 +121,7 @@ const Battle = {
     B.round++;
     const repeatVolley = tactic === 'volley' && B.lastTactic === 'volley';
     B.lastTactic = tactic;
-    const S = s.soldiers, H = s.horses, C = s.cannons, L = s.allies;
+    const S = s.soldiers, H = s.horses, C = s.cannons, L = s.allies + s.auxiliaries;
     let A = Math.min(s.arquebuses, S);
     const events = [];
     let dmg, shock = 0, enemyMult = 1;
@@ -237,7 +240,7 @@ const Battle = {
           <h4>Your expedition</h4>
           <div>⚔️ Soldiers: <b>${s.soldiers}</b> / ${B.S0}${B.wounded ? ` <span class="small">(${B.wounded} wounded out of the fight)</span>` : ''}</div>
           <div>🐎 Horses: <b>${s.horses}</b> · 🔫 Arquebuses: <b>${s.arquebuses}</b> · 💣 Cannon: <b>${s.cannons}</b></div>
-          <div>🏹 Native allies: <b>${fmt(s.allies)}</b></div>
+          <div>🏹 Native allies: <b>${fmt(s.allies)}</b> · 🪶 Auxiliaries: <b>${fmt(s.auxiliaries)}</b></div>
           <div class="bar"><div style="width:${(s.soldiers / Math.max(1, B.S0)) * 100}%;background:#c9a227"></div></div>
           <div class="small">Strength of your men: ${fatigue}%</div>
         </div>

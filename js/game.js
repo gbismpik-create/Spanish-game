@@ -22,7 +22,7 @@ const Game = {
       captain: captain || 'Capitán',
       day: 0, lastMonth: null,
       ducats: 500, treasure: 0,
-      soldiers: 40, horses: 4, arquebuses: 10, cannons: 1, allies: 0,
+      soldiers: 40, horses: 4, arquebuses: 10, cannons: 1, allies: 0, auxiliaries: 0,
       food: 260, goods: 60, priests: 1,
       shipType: 'caravel', hull: 100,
       ship: { x: 0, y: 0, dir: -1 }, party: null,
@@ -30,7 +30,7 @@ const Game = {
       settlements: [], ruins: [], cultures: {},
       artifacts: [], discoveries: [],
       log: [], chronicleShown: [],
-      stats: { battles: 0, won: 0, warDeaths: 0, diseaseDeaths: 0, soldiersLost: 0, conquered: 0, tiles: 0, converts: 0 },
+      stats: { battles: 0, won: 0, warDeaths: 0, diseaseDeaths: 0, soldiersLost: 0, conquered: 0, tiles: 0, converts: 0, labourDeaths: 0 },
       starveWarned: 0, tordesillas: false, over: false,
     };
     for (const [id, c] of Object.entries(CULTURES)) s.cultures[id] = { rel: c.rel, shock: 1, met: false };
@@ -146,7 +146,7 @@ const Game = {
   canAfford(cost) { return this.s.ducats + this.s.treasure >= cost; },
   addFame(n, why) { this.s.fame += n; if (why) this.log(`+${n} fame — ${why}`, 'fame'); },
 
-  dailyFood() { return 1 + this.s.soldiers / 20 + this.s.allies / 40; },
+  dailyFood() { return 1 + this.s.soldiers / 20 + this.s.allies / 40 + this.s.auxiliaries / 30; },
   addFood(n) {
     const s = this.s;
     const add = Math.max(0, Math.min(Math.round(n), this.ship().food - s.food));
@@ -183,8 +183,10 @@ const Game = {
         if (s.day - s.starveWarned > 10) { this.log(`Your men are starving! ${lost} have died. Find provisions!`, 'bad'); s.starveWarned = s.day; }
       }
       if (s.allies > 0) { s.allies = 0; this.log('Without food, your native allies desert you.', 'warn'); }
+      if (s.auxiliaries > 0) { const d = Math.ceil(s.auxiliaries * 0.1); s.auxiliaries -= d; this.log(`${d} hungry auxiliaries desert.`, 'warn'); }
       if (s.soldiers <= 0) return this.gameOver('Starvation', 'The last of your men perished from hunger in an unknown land.');
     }
+    this.tickBuilds();
     const after = this.date();
     const m0 = before.getUTCFullYear() * 12 + before.getUTCMonth();
     const m1 = after.getUTCFullYear() * 12 + after.getUTCMonth();
@@ -228,10 +230,15 @@ const Game = {
     }
     for (const [o, d] of newly) this.infect(o, d, true);
     // colonies
-    for (const st of sts) if (st.conquered) {
-      const T = SETTLEMENT_TYPES[st.type];
-      st.treasury += Math.round(T.income * Math.max(0.3, st.pop / st.pop0) * (st.converted >= 50 ? 1.25 : 1));
-      st.recruits = Math.min(20, st.recruits + 1);
+    for (const st of sts) if (st.conquered) this.colonyMonth(st);
+    // auxiliaries expect their pay
+    if (s.auxiliaries > 0) {
+      const pay = Math.ceil(s.auxiliaries / 10);
+      if (!this.spend(pay)) {
+        const d = Math.ceil(s.auxiliaries * 0.2);
+        s.auxiliaries -= d;
+        this.log(`You cannot pay your auxiliaries. ${d} of them desert.`, 'warn');
+      }
     }
     // relations slowly cool towards neutral
     for (const c of Object.values(s.cultures)) if (c.rel < -20) c.rel = Math.min(-20, c.rel + 0.5);
@@ -357,6 +364,14 @@ const Game = {
     if (!s.party) return;
     s.party = null;
     if (s.allies > 0) { this.log(`Your ${fmt(s.allies)} native allies return to their homes.`, ''); s.allies = 0; }
+    const room = this.ship().men - s.soldiers;
+    if (s.auxiliaries > room) {
+      const left = s.auxiliaries - Math.max(0, room);
+      s.auxiliaries -= left;
+      const home = this.nearestColony(s.ship.x, s.ship.y, 15);
+      if (home) { home.garrison.aux += left; this.log(`No room aboard for ${left} auxiliaries. They join the garrison of ${home.name}.`, 'warn'); }
+      else this.log(`No room aboard for ${left} auxiliaries. They are left behind and go home.`, 'warn');
+    }
     this.log('The expedition returns aboard ship.', '');
     UI.refresh();
   },
@@ -440,7 +455,7 @@ const Game = {
   },
 
   // Friars preach in a settlement. Returns a message for the dialog.
-  preach(st) {
+  preach(st, churchLevel = 0) {
     const s = this.s, cs = s.cultures[st.culture];
     if (s.priests <= 0) return null;
     this.advance(10);
@@ -456,7 +471,7 @@ const Game = {
     const size = { village: 1, town: 0.8, city: 0.6, capital: 0.45 }[st.type];
     const open = { taino: 1.2, guarani: 1.3, totonac: 1.2, tlaxcala: 1.2, kaqchikel: 1.1, canari: 1.2, huanca: 1.2, mapuche: 0.5, mexica: 0.8, inca: 0.8, kalinago: 0.6, charrua: 0.6 }[st.culture] || 1;
     const friars = Math.min(s.priests, 4);
-    const gain = Math.max(2, Math.round(rand(6, 14) * size * open * (st.conquered ? 1.5 : 1) * (0.75 + friars * 0.25)));
+    const gain = Math.max(2, Math.round(rand(6, 14) * size * open * (st.conquered ? 1.5 : 1) * (0.75 + friars * 0.25) * (1 + 0.2 * churchLevel)));
     const before = st.converted;
     st.converted = Math.min(100, st.converted + gain);
     const converts = Math.round(st.pop * (st.converted - before) / 100);
@@ -558,7 +573,7 @@ const Game = {
   // ------------------------------------------------------------ diplomacy
   strengthRatio(st) {
     const s = this.s;
-    const ours = s.soldiers + s.arquebuses * 0.8 + s.horses * 2.5 + s.cannons * 5 + s.allies * 0.35;
+    const ours = s.soldiers + s.arquebuses * 0.8 + s.horses * 2.5 + s.cannons * 5 + (s.allies + s.auxiliaries) * 0.35;
     const theirs = this.warriors(st) * CULTURES[st.culture].t * 0.3 * (st.type === 'city' || st.type === 'capital' ? 1.3 : 1);
     return ours / Math.max(1, theirs);
   },
@@ -611,9 +626,102 @@ const Game = {
       html += `<p class="flavor">The heart of the ${empire} is in your hands. Its subject peoples watch to see what kind of masters the newcomers will be.</p>`;
       this.log(`The capital of the ${empire} has fallen.`, 'big');
     }
-    html += `<p>${st.name} becomes a Spanish colony. It will pay tribute over time, supply provisions and recruits${this.adjacentWater(st.x, st.y) ? ', and serve as a port' : ''}.</p>`;
-    UI.dialog(`⚔️ ${st.name} conquered`, html, [['Continue', () => UI.close()]]);
+    this.ensureColony(st);
+    html += `<p>${st.name} becomes a Spanish colony. Build it up from its city screen: walls, barracks, church, fields, mines and more.</p>`;
+    // the surviving warriors
+    const w = Math.max(5, Math.round(this.warriors(st) * 0.5));
+    const room = this.ship().men - s.soldiers - s.auxiliaries;
+    html += `<h3>The defeated warriors</h3><p>About <b>${fmt(w)}</b> warriors have laid down their arms. What will you do with them?</p>`;
+    const done = (msg, cls) => { this.log(msg, cls); UI.close(); UI.refresh(); };
+    UI.dialog(`⚔️ ${st.name} conquered`, html, [
+      [`🪶 Press them into service (+${fmt(w)} auxiliaries)`, () => {
+        s.auxiliaries += w; st.pop = Math.max(50, st.pop - w); this.changeRel(st.culture, -15);
+        done(`${fmt(w)} warriors of ${st.name} are pressed into your service as auxiliaries. Their people resent it.`, 'warn');
+      }, false, `They march with you and stay when you sail, but eat, need pay (1 ducat per 10 a month), and take berths aboard (room now: ${Math.max(0, room)})`],
+      [`🏰 Make them the city's garrison`, () => {
+        st.garrison.aux += w; this.changeRel(st.culture, -5);
+        done(`${fmt(w)} warriors of ${st.name} are made to garrison the town under Spanish officers.`, '');
+      }, false, 'They defend the colony against raids and revolts'],
+      ['🕊️ Release them', () => {
+        this.changeRel(st.culture, 10);
+        done(`You release the warriors of ${st.name}. Their people take note.`, 'good');
+      }, false, 'Improves relations with their people'],
+    ], true);
     UI.refresh();
+  },
+
+  // ------------------------------------------------------------ colonies
+  ensureColony(st) {
+    if (!st.buildings) st.buildings = Object.fromEntries(Object.keys(BUILDINGS).map((k) => [k, 0]));
+    if (!st.queue) st.queue = [];
+    if (!st.garrison) st.garrison = { soldiers: 0, aux: 0 };
+    if (st.store == null) st.store = 0;
+    if (st.auxPool == null) st.auxPool = 0;
+    if (st.horsesAvail == null) st.horsesAvail = 0;
+  },
+  colonies() { return this.s.settlements.filter((st) => st.conquered); },
+  nearestColony(x, y, maxDist) {
+    let best = null, bd = maxDist;
+    for (const st of this.colonies()) { const d = Math.hypot(st.x - x, st.y - y); if (d <= bd) { bd = d; best = st; } }
+    return best;
+  },
+  colonyMonth(st) {
+    const s = this.s, b = st.buildings, T = SETTLEMENT_TYPES[st.type];
+    const popF = Math.max(0.3, st.pop / st.pop0);
+    st.treasury += Math.round(T.income * popF * (st.converted >= 50 ? 1.25 : 1) * (1 + 0.25 * b.cabildo));
+    st.recruits = Math.min(20 + 10 * b.barracks, st.recruits + 1 + b.barracks);
+    if (b.barracks) st.auxPool = Math.min(60 * b.barracks, st.auxPool + Math.round(5 * b.barracks * popF));
+    if (b.fields) st.store = Math.min(150 * b.fields, st.store + 30 * b.fields);
+    if (b.stables) st.horsesAvail = Math.min(4 * b.stables, st.horsesAvail + b.stables);
+    if (b.church) st.converted = Math.min(100, st.converted + b.church);
+    if (b.mine) {
+      st.treasury += Math.round([0, 25, 55, 95, 150, 220][b.mine] * popF);
+      const dead = Math.round(st.pop * 0.004 * b.mine);
+      st.pop = Math.max(50, st.pop - dead);
+      s.stats.labourDeaths += dead;
+    }
+  },
+  buildMax(st, id) { return id === 'cabildo' ? 5 : Math.min(5, st.buildings.cabildo + 1); },
+  queuedLevel(st, id) { return st.buildings[id] + st.queue.filter((q) => q.b === id).length; },
+  buildCost(id, level) {
+    const B = BUILDINGS[id];
+    return { gold: Math.round(B.cost * BUILD_COST_MULT[level - 1]), days: Math.round(B.days * BUILD_DAYS_MULT[level - 1]) };
+  },
+  // returns why a building cannot be upgraded, or null
+  buildBlock(st, id) {
+    const next = this.queuedLevel(st, id) + 1;
+    if (BUILDINGS[id].coastal && !this.adjacentWater(st.x, st.y)) return 'Needs a coast';
+    if (next > 5) return 'Maximum level';
+    if (next > this.buildMax(st, id)) return `Needs Cabildo level ${next - 1}`;
+    if (st.queue.length >= 2) return 'Builders busy (2 in queue)';
+    if (st.treasury + this.s.ducats + this.s.treasure < this.buildCost(id, next).gold) return 'Not enough gold';
+    return null;
+  },
+  startBuild(st, id) {
+    if (this.buildBlock(st, id)) return;
+    const s = this.s, level = this.queuedLevel(st, id) + 1;
+    const { gold, days } = this.buildCost(id, level);
+    const fromCity = Math.min(st.treasury, gold);
+    st.treasury -= fromCity;
+    this.spend(gold - fromCity);
+    st.queue.push({ b: id, level, days, done: st.queue.length ? null : s.day + days });
+    this.log(`Construction begins in ${st.name}: ${BUILDINGS[id].name} level ${level} (${days} days).`, '');
+  },
+  tickBuilds() {
+    const s = this.s;
+    for (const st of this.colonies()) {
+      if (!st.queue || !st.queue.length) continue;
+      while (st.queue.length && st.queue[0].done != null && st.queue[0].done <= s.day) {
+        const q = st.queue.shift();
+        st.buildings[q.b] = q.level;
+        this.log(`${st.name}: ${BUILDINGS[q.b].name} level ${q.level} is complete.`, 'good');
+        if (st.queue.length) st.queue[0].done = q.done + st.queue[0].days;
+      }
+    }
+  },
+  garrisonStrength(st) {
+    const g = st.garrison;
+    return (g.soldiers + g.aux * 0.35) * (1 + 0.25 * st.buildings.walls);
   },
 
   clampArmy() {
@@ -622,6 +730,7 @@ const Game = {
     s.horses = Math.max(0, Math.min(s.horses, s.soldiers));
     s.arquebuses = Math.max(0, Math.min(s.arquebuses, s.soldiers));
     s.allies = Math.max(0, Math.round(s.allies));
+    s.auxiliaries = Math.max(0, Math.round(s.auxiliaries || 0));
   },
 
   // ------------------------------------------------------------ Spain
@@ -685,7 +794,13 @@ const Game = {
       }
       if (this.s.priests == null) this.s.priests = 0;
       if (this.s.stats.converts == null) this.s.stats.converts = 0;
-      for (const st of this.s.settlements) { if (st.converted == null) st.converted = 0; if (st.foodReadyDay == null) st.foodReadyDay = 0; }
+      for (const st of this.s.settlements) {
+        if (st.converted == null) st.converted = 0;
+        if (st.foodReadyDay == null) st.foodReadyDay = 0;
+        if (st.conquered) this.ensureColony(st);
+      }
+      if (this.s.auxiliaries == null) this.s.auxiliaries = 0;
+      if (this.s.stats.labourDeaths == null) this.s.stats.labourDeaths = 0;
       this.buildSiteIndex();
       return true;
     } catch (e) { console.error(e); return false; }

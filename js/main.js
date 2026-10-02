@@ -422,7 +422,7 @@ const Render = {
     const nArq = s.soldiers > 0 ? Math.min(3, Math.ceil((s.arquebuses / Math.max(1, s.soldiers)) * 4)) : 0;
     const nSol = clamp(Math.ceil(s.soldiers / 12), 1, 7);
     const nRid = s.horses > 0 ? Math.min(3, Math.ceil(s.horses / 8)) : 0;
-    const nAll = s.allies > 0 ? Math.min(6, Math.ceil(s.allies / 120)) : 0;
+    const nAll = s.allies + s.auxiliaries > 0 ? Math.min(6, Math.ceil((s.allies + s.auxiliaries) / 120)) : 0;
     // back rows first: allies on the far flank, friar and standard in the middle, soldiers in front
     for (let i = 0; i < nAll; i++) figs.push({ kind: 'native', x: -24 + (i % 3) * 6.5 + (i > 2 ? 3 : 0), y: -6 + Math.floor(i / 3) * 7 });
     figs.push({ kind: 'banner', x: 0, y: -7 });
@@ -469,6 +469,37 @@ const Render = {
     c.fillStyle = flag2; c.fillRect(0, -18, 7, 2); c.fillStyle = flag; c.fillRect(0, -16, 7, 2); c.fillStyle = flag2; c.fillRect(0, -14, 7, 1.5);
     c.restore();
   },
+  // a colony grows on the map as it is built up
+  drawColony(x, y, z, st) {
+    const c = this.ctx, b = st.buildings || {}, t = this.time;
+    const total = Object.values(b).reduce((a, v) => a + v, 0);
+    const k = (z / 24) * (1 + Math.min(0.5, total * 0.03));
+    c.save(); c.translate(x + z / 2, y + z / 2); c.scale(k, k);
+    if (b.fields) { c.fillStyle = '#c8b050'; for (let i = 0; i < Math.min(3, b.fields); i++) c.fillRect(-14 + i * 4, 6, 3, 4); }
+    if (b.walls) {
+      c.strokeStyle = '#b8a888'; c.lineWidth = 1 + b.walls * 0.4;
+      c.beginPath(); c.ellipse(0, 3, 13, 7.5, 0, 0, 7); c.stroke();
+      c.fillStyle = '#a89878';
+      for (const [wx, wy] of [[-13, 3], [13, 3], [0, -4.5], [0, 10.5]]) c.fillRect(wx - 1.5, wy - 2.5, 3, 4);
+    }
+    // houses
+    c.fillStyle = '#e8dcc4';
+    const houses = Math.min(5, 1 + Math.floor(total / 3));
+    for (let i = 0; i < houses; i++) { const hx = -9 + (i % 3) * 7, hy = 2 + Math.floor(i / 3) * 4; c.fillRect(hx, hy, 4.5, 3); c.fillStyle = '#a0402a'; c.fillRect(hx - 0.5, hy - 1.2, 5.5, 1.4); c.fillStyle = '#e8dcc4'; }
+    // keep with flag
+    c.fillStyle = '#d8cbb0'; c.fillRect(-4, -6, 8, 9);
+    c.fillStyle = '#b8a888'; for (let i = -4; i < 4; i += 2.7) c.fillRect(i, -8, 1.7, 2);
+    c.fillStyle = '#4a3a2a'; c.fillRect(-1.2, -1, 2.4, 4);
+    c.strokeStyle = '#3a2a1a'; c.lineWidth = 0.8; c.beginPath(); c.moveTo(0, -8); c.lineTo(0, -16); c.stroke();
+    this.drawFlag(c, 0, -16, 7, 4.5, t);
+    if (b.church || st.converted >= 50) {
+      c.fillStyle = '#f0e6d0'; c.fillRect(6, -4, 5, 7); c.fillStyle = '#a0402a'; c.beginPath(); c.moveTo(5.5, -4); c.lineTo(8.5, -7); c.lineTo(11.5, -4); c.fill();
+      c.fillStyle = '#f4ecd8'; c.fillRect(8.1, -11, 0.9, 4); c.fillRect(7.1, -10, 2.9, 0.9);
+    }
+    if (b.mine) { c.fillStyle = '#5a4a3a'; c.beginPath(); c.moveTo(-15, 0); c.lineTo(-11, -6); c.lineTo(-7, 0); c.fill(); c.fillStyle = '#1a1410'; c.fillRect(-12, -2, 2, 2); }
+    if (st.queue && st.queue.length) { c.strokeStyle = '#8a6a3a'; c.lineWidth = 0.6; c.strokeRect(-14, -5, 4, 8); c.beginPath(); c.moveTo(-14, -1); c.lineTo(-10, -1); c.stroke(); }
+    c.restore();
+  },
   drawRuin(x, y, z, r) {
     const c = this.ctx, k = z / 24;
     c.save(); c.translate(x + z / 2, y + z / 2); c.scale(k, k);
@@ -482,7 +513,7 @@ const Render = {
   },
   drawSettlement(x, y, z, st) {
     const c = this.ctx, k = z / 24, s = Game.s;
-    if (st.conquered) { this.drawCastle(x, y, z, '#e8c040', '#b02020'); return; }
+    if (st.conquered) { this.drawColony(x, y, z, st); return; }
     const size = { village: 0.75, town: 0.9, city: 1.05, capital: 1.25 }[st.type];
     c.save(); c.translate(x + z / 2, y + z / 2); c.scale(k * size, k * size);
     const [, cls] = Game.relLabel(s.cultures[st.culture].rel);
@@ -575,7 +606,7 @@ const Input = {
     if (site && site.kind === 'settlement') {
       const st = site.ref;
       const [l, cls] = Game.relLabel(Game.s.cultures[st.culture].rel);
-      html += st.conquered ? `<br>⛪ <b>${st.name}</b> — Spanish colony` : `<br><b>${st.name}</b> — ${SETTLEMENT_TYPES[st.type].label}, ${CULTURES[st.culture].name}<br>Pop. ${fmt(st.pop)} · <span class="${cls}">${l}</span>`;
+      html += st.conquered ? `<br>🏰 <b>${st.name}</b> — Spanish colony${st.queue && st.queue.length ? ' · building' : ''}` : `<br><b>${st.name}</b> — ${SETTLEMENT_TYPES[st.type].label}, ${CULTURES[st.culture].name}<br>Pop. ${fmt(st.pop)} · <span class="${cls}">${l}</span>`;
       if (st.converted > 0) html += `<br>✝️ ${st.converted}% Christian${st.converted >= 50 ? ' (mission)' : ''}`;
       if (st.infection) html += `<br><span class="disease">☠ ${DISEASES.find((d) => d.id === st.infection.d).name} epidemic</span>`;
     } else if (site && site.kind === 'ruin') html += `<br>🏛️ <b>${site.ref.name}</b>${site.ref.explored ? ' (searched)' : ' — unexplored ruins'}`;

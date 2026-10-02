@@ -353,3 +353,20 @@ const DISEASES = [
   { id: 'typhus', name: 'Typhus', rate: 0.04, months: 6 },
   { id: 'influenza', name: 'Influenza', rate: 0.03, months: 4 },
 ];
+
+// ---------------------------------------------------------------------------
+// Colony buildings. Each has levels 1-5; cost and time grow per level.
+// Other buildings cannot rise above the Cabildo's level + 1.
+// ---------------------------------------------------------------------------
+const BUILDINGS = {
+  cabildo: { name: 'Cabildo', icon: '🏛️', cost: 250, days: 30, desc: 'The town council. Raises the level cap of every other building and adds 25% tribute per level.' },
+  barracks: { name: 'Barracks', icon: '⚔️', cost: 200, days: 25, desc: 'Draws Spanish settlers to enlist and trains native auxiliaries. More recruits each month per level.' },
+  walls: { name: 'Walls & Fort', icon: '🏰', cost: 300, days: 40, desc: 'Stone walls and a fort. Each level strengthens the garrison against raids and revolts by 25%.' },
+  church: { name: 'Church', icon: '⛪', cost: 180, days: 30, desc: 'Friars convert the townspeople a little every month, and preaching here works faster.' },
+  fields: { name: 'Fields & Granary', icon: '🌽', cost: 150, days: 20, desc: 'Maize fields and a granary. Stores provisions every month for your expeditions.' },
+  mine: { name: 'Mines', icon: '⛏️', cost: 400, days: 45, desc: 'Gold and silver every month, dug by forced native labour. The mines slowly kill the people who work them.' },
+  harbor: { name: 'Harbour', icon: '⚓', cost: 250, days: 35, coastal: true, desc: 'Cheap ship repairs. At level 3 shipwrights build naos here, at level 5 galleons.' },
+  stables: { name: 'Stables', icon: '🐎', cost: 220, days: 30, desc: 'Breeds horses from Spanish stock, sold here more cheaply than in Sevilla.' },
+};
+const BUILD_COST_MULT = [1, 2, 4, 7, 12];
+const BUILD_DAYS_MULT = [1, 1.5, 2, 3, 4];

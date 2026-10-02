@@ -72,7 +72,9 @@ The playable claude.ai artifact is a single bundled HTML file: the `<body>` of `
 - Map, ship and party movement, fog of war, minimap
 - Detailed sprites: a distinct look per ship type with a wake; the expedition drawn as a marching formation built from the real army
 - Sea and land events, discoveries, ruins and artifacts
-- Diplomacy, disease, conquest, friars, colonies
+- Diplomacy, disease, conquest, friars
+- Colony city screen (Grepolis-style): 8 buildings with levels 1–5, a 2-slot construction queue paid in gold and game time, monthly production, garrisons; colonies grow on the map
+- After a conquest: press warriors into service as auxiliaries (permanent, paid, take berths), garrison them, or release them
 - Turn-based battles with tactics and per-culture war styles
 - Sevilla port and treasury, scoring, end screen with human cost
 - Save/load

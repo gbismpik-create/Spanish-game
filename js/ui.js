@@ -39,6 +39,7 @@ const UI = {
       ['🔫', s.arquebuses, 'Arquebuses'],
       ['💣', s.cannons, `Cannon (max ${sh.cannons})`],
       ['🏹', fmt(s.allies), 'Native allies (leave when you re-embark)'],
+      ['🪶', fmt(s.auxiliaries), 'Native auxiliaries in your service (paid monthly, sail with you)'],
       ['✝️', s.priests, 'Friars: send them to preach in native towns and colonies'],
       ['🍖', `${fmt(s.food)}`, `Provisions (${Math.floor(s.food / (1 + s.soldiers / 20 + s.allies / 40))} days)`],
       ['📦', s.goods, 'Trade goods: beads, cloth, iron tools'],
@@ -201,33 +202,105 @@ const UI = {
     this.dialog(`${st.name}`, html, actions);
   },
 
+  buildingEffect(st, id, lvl) {
+    if (!lvl) return 'Not built';
+    const T = SETTLEMENT_TYPES[st.type];
+    switch (id) {
+      case 'cabildo': return `+${lvl * 25}% tribute · other buildings up to level ${Math.min(5, lvl + 1)}`;
+      case 'barracks': return `+${1 + lvl} settlers/month · ${5 * lvl} auxiliaries/month`;
+      case 'walls': return `Garrison +${lvl * 25}% stronger`;
+      case 'church': return `+${lvl}% Christians/month · faster preaching`;
+      case 'fields': return `+${30 * lvl} provisions/month (store ${150 * lvl})`;
+      case 'mine': return `+${[0, 25, 55, 95, 150, 220][lvl]} gold/month · ${(0.4 * lvl).toFixed(1)}% of workers die each month`;
+      case 'harbor': return `Repairs 1 per point${lvl >= 3 ? ' · builds naos' : ''}${lvl >= 5 ? ' & galleons' : ''}`;
+      case 'stables': return `+${lvl} horses/month (up to ${4 * lvl})`;
+      default: return T ? '' : '';
+    }
+  },
+
   colonyDialog(st, fromShip) {
-    const s = Game.s;
+    const s = Game.s, sh = Game.ship();
+    Game.ensureColony(st);
+    const b = st.buildings, g = st.garrison;
     const coastal = !!Game.adjacentWater(st.x, st.y);
     const shipHere = Math.abs(s.ship.x - st.x) <= 1 && Math.abs(s.ship.y - st.y) <= 1;
-    const sh = Game.ship();
-    const html = `<p class="sub">Spanish colony · formerly a ${SETTLEMENT_TYPES[st.type].label.toLowerCase()} of the ${CULTURES[st.culture].name}</p>
-      <div class="stats"><div>Population: <b>${fmt(st.pop)}</b></div><div>Tribute collected: <b>${fmt(st.treasury)}</b></div>
-      <div>Settlers willing to join: <b>${st.recruits}</b></div><div>Port: <b>${coastal ? 'yes' : 'no'}</b></div>
-      <div>Christians: <b>${st.converted}%</b>${st.converted >= 50 ? ' ✝️ mission (+25% tribute)' : ''}</div><div>Your friars: <b>${s.priests}</b></div></div>
-      <p class="flavor">Encomenderos force the native people to labour in fields and mines. The friars complain to the Crown.</p>`;
     const re = () => this.colonyDialog(st, fromShip);
-    const actions = [
-      [`🪙 Collect tribute (${fmt(st.treasury)})`, () => { s.treasure += st.treasury; Game.log(`Collected ${fmt(st.treasury)} tribute at ${st.name}.`, 'good'); st.treasury = 0; re(); }, st.treasury <= 0],
-      ['🍖 Buy 150 provisions (80)', () => { if (Game.spend(80)) Game.addFood(150); re(); }, !Game.canAfford(80) || s.food >= sh.food],
-      ['✝️ Send friars to preach', () => {
-        const html = Game.preach(st);
-        if (html === null || Game.s.over) return;
-        this.dialog(`✝️ ${st.name}`, html, [['Continue', re]]);
-      }, s.priests <= 0 || st.converted >= 100, 'Takes 10 days'],
-      [`⚔️ Recruit 5 settlers (175)`, () => { if (Game.spend(175)) { s.soldiers += 5; st.recruits -= 5; } re(); }, st.recruits < 5 || !Game.canAfford(175) || s.soldiers + 5 > sh.men],
-      ['🔧 Repair ship (3/pt)', () => {
-        const need = sh.hull - s.hull; const afford = Math.floor((s.ducats + s.treasure) / 3);
-        const n = Math.min(need, afford); if (n > 0 && Game.spend(n * 3)) { s.hull += n; Game.log(`Ship repaired at ${st.name}.`, 'good'); } re();
-      }, !(coastal && shipHere) || s.hull >= sh.hull, 'Ship must be anchored next to a coastal colony'],
-      ['Leave', () => this.close()],
-    ];
-    this.dialog(`⛪ ${st.name}`, html, actions);
+    const act = {};
+    // construction queue
+    const queue = st.queue.map((q, i) => {
+      const B = BUILDINGS[q.b];
+      if (i === 0) {
+        const left = Math.max(0, Math.ceil(q.done - s.day));
+        const pct = Math.round((1 - left / q.days) * 100);
+        return `<div class="q-item"><span>${B.icon} ${B.name} → level ${q.level}</span><div class="bar"><div style="width:${pct}%;background:#c9a227"></div></div><small>${left} days left</small></div>`;
+      }
+      return `<div class="q-item"><span>${B.icon} ${B.name} → level ${q.level}</span><small>waiting · ${q.days} days</small></div>`;
+    }).join('') || '<div class="small">No construction under way. Choose a building below.</div>';
+    // building cards
+    const cards = Object.entries(BUILDINGS).map(([id, B]) => {
+      const lvl = b[id], next = Game.queuedLevel(st, id) + 1;
+      const block = Game.buildBlock(st, id);
+      const cost = next <= 5 ? Game.buildCost(id, next) : null;
+      act['build-' + id] = () => { Game.startBuild(st, id); re(); };
+      const pips = [1, 2, 3, 4, 5].map((n) => `<i class="${n <= lvl ? 'on' : n < next ? 'q' : ''}"></i>`).join('');
+      const btn = cost && block !== 'Maximum level' && block !== 'Needs a coast'
+        ? `<button data-act="build-${id}" ${block ? 'disabled' : ''} title="${block || ''}">${next > 1 ? 'Upgrade' : 'Build'} to ${next} · ${fmt(cost.gold)} · ${cost.days}d</button>${block ? `<small class="why">${block}</small>` : ''}`
+        : `<small class="why">${block}</small>`;
+      return `<div class="bcard${lvl ? ' built' : ''}"><div class="bhead"><span class="bicon">${B.icon}</span><b>${B.name}</b><span class="pips">${pips}</span></div>
+        <p>${B.desc}</p><div class="beff">${this.buildingEffect(st, id, lvl)}</div>${btn}</div>`;
+    }).join('');
+    // services
+    const room = sh.men - s.soldiers;
+    const repairPrice = b.harbor ? 1 : 3;
+    const svc = [];
+    const add = (key, label, fn, disabled, tip) => { act[key] = () => { fn(); re(); }; svc.push(`<button data-act="${key}" ${disabled ? 'disabled' : ''} title="${tip || ''}">${label}</button>`); };
+    add('tribute', `🪙 Collect tribute (${fmt(st.treasury)})`, () => { s.treasure += st.treasury; Game.log(`Collected ${fmt(st.treasury)} tribute at ${st.name}.`, 'good'); st.treasury = 0; }, st.treasury <= 0);
+    add('store', `🌽 Collect provisions (${fmt(st.store)})`, () => { const got = Game.addFood(st.store); st.store -= got; }, st.store <= 0 || s.food >= sh.food);
+    add('food', '🍖 Buy 150 provisions (80)', () => { if (Game.spend(80)) Game.addFood(150); }, !Game.canAfford(80) || s.food >= sh.food);
+    add('settlers', `⚔️ Enlist 5 settlers (175) · ${st.recruits} willing`, () => { if (Game.spend(175)) { s.soldiers += 5; st.recruits -= 5; } }, st.recruits < 5 || !Game.canAfford(175) || room < 5);
+    add('aux', `🪶 Hire 10 auxiliaries (100) · ${st.auxPool} trained`, () => { if (Game.spend(100)) { s.auxiliaries += 10; st.auxPool -= 10; } }, st.auxPool < 10 || !Game.canAfford(100), 'Needs Barracks');
+    add('horse', `🐎 Buy a horse (50) · ${st.horsesAvail} for sale`, () => { if (Game.spend(50)) { s.horses++; st.horsesAvail--; } }, st.horsesAvail < 1 || !Game.canAfford(50) || s.horses >= s.soldiers, 'Needs Stables');
+    add('preach', '✝️ Send friars to preach', () => {}, s.priests <= 0 || st.converted >= 100, 'Takes 10 days');
+    act.preach = () => {
+      const html = Game.preach(st, b.church);
+      if (html === null || Game.s.over) return;
+      this.dialog(`✝️ ${st.name}`, html, [['Back to the city', re]]);
+    };
+    add('repair', `🔧 Repair ship (${repairPrice}/pt)`, () => {
+      const n = Math.min(sh.hull - s.hull, Math.floor((s.ducats + s.treasure) / repairPrice));
+      if (n > 0 && Game.spend(n * repairPrice)) { s.hull += n; Game.log(`Ship repaired at ${st.name}.`, 'good'); }
+    }, !(coastal && shipHere) || s.hull >= sh.hull, 'The ship must be anchored next to this colony');
+    for (const [k, v] of Object.entries(SHIPS)) {
+      const need = k === 'nao' ? 3 : k === 'galleon' ? 5 : 99;
+      if (k === s.shipType || need > 5) continue;
+      const cost = Math.max(0, Math.round(v.cost * 1.2) - Math.round(sh.cost / 2));
+      add('ship-' + k, `⛵ Build a ${v.name} (${fmt(cost)})`, () => {
+        if (s.soldiers > v.men || !Game.spend(cost)) return;
+        s.shipType = k; s.hull = v.hull; s.food = Math.min(s.food, v.food); s.cannons = Math.min(s.cannons, v.cannons);
+        Game.log(`The shipwrights of ${st.name} launch your new ${v.name}.`, 'good');
+      }, b.harbor < need || !shipHere || !Game.canAfford(cost), `Needs Harbour level ${need} and your ship in port`);
+    }
+    // garrison
+    const gar = [];
+    const gadd = (key, label, fn, disabled) => { act[key] = () => { fn(); re(); }; gar.push(`<button data-act="${key}" ${disabled ? 'disabled' : ''}>${label}</button>`); };
+    gadd('g-s-in', '⬇ Station 10 soldiers', () => { s.soldiers -= 10; g.soldiers += 10; Game.clampArmy(); }, s.soldiers <= 10);
+    gadd('g-s-out', '⬆ Take 10 soldiers', () => { g.soldiers -= 10; s.soldiers += 10; }, g.soldiers < 10 || room < 10);
+    gadd('g-a-in', '⬇ Station 50 auxiliaries', () => { const n = Math.min(50, s.auxiliaries); s.auxiliaries -= n; g.aux += n; }, s.auxiliaries <= 0);
+    gadd('g-a-out', '⬆ Take 50 auxiliaries', () => { const n = Math.min(50, g.aux); g.aux -= n; s.auxiliaries += n; }, g.aux <= 0);
+    const strength = Math.round(Game.garrisonStrength(st));
+    const html = `<p class="sub">Spanish colony · formerly a ${SETTLEMENT_TYPES[st.type].label.toLowerCase()} of the ${CULTURES[st.culture].name}</p>
+      <div class="stats">
+        <div>Population: <b>${fmt(st.pop)}</b> <small>(${fmt(st.pop0)} before the conquest)</small></div><div>Christians: <b>${st.converted}%</b>${st.converted >= 50 ? ' ✝️' : ''}</div>
+        <div>Treasury: <b>${fmt(st.treasury)}</b> gold</div><div>Granary: <b>${fmt(st.store)}</b> provisions</div>
+        <div>Garrison: <b>${g.soldiers}</b> soldiers, <b>${fmt(g.aux)}</b> auxiliaries</div><div>Defence strength: <b>${fmt(strength)}</b>${b.walls ? ` (walls +${b.walls * 25}%)` : ''}</div>
+      </div>
+      <h3>Construction</h3><div class="queue">${queue}</div>
+      <h3>Buildings</h3><div class="bgrid">${cards}</div>
+      <h3>Services</h3><div class="svc">${svc.join('')}</div>
+      <h3>Garrison</h3><div class="svc">${gar.join('')}</div>
+      <p class="small">Building costs are paid from the city treasury first, then your purse. Upgrades continue while you are away.</p>
+      ${b.mine ? `<p class="flavor">Under the encomienda and the mita, the people of ${st.name} are forced to dig in the mines. ${fmt(Game.s.stats.labourDeaths)} have died in forced labour across your colonies.</p>` : ''}`;
+    this.dialog(`🏰 ${st.name}`, html, [['Leave', () => this.close()]], false, act);
   },
 
   // ------------------------------------------------------------ Sevilla
@@ -244,7 +317,7 @@ const UI = {
     const row = (label, what, price, opts, cap, note) => `<div class="shop-row"><span class="lbl">${label} <small>${price} each${note ? ' · ' + note : ''}</small></span>
       <span class="have">${fmt(s[what])}</span>${opts.map((n) => `<button data-act="${what}-${n}" ${cap <= 0 || !Game.canAfford(price) ? 'disabled' : ''}>+${n === 9999 ? 'Max' : n}</button>`).join('')}</div>`;
     const caps = {
-      soldiers: sh.men - s.soldiers,
+      soldiers: sh.men - s.soldiers - s.auxiliaries,
       horses: Math.min(Math.floor(sh.men / 4), s.soldiers) - s.horses,
       arquebuses: s.soldiers - s.arquebuses,
       cannons: sh.cannons - s.cannons,
@@ -345,7 +418,8 @@ const UI = {
       <li><b>Disease</b>: your men unknowingly carry smallpox, measles and typhus. Epidemics spread from town to town ahead of you, killing a large share of the population. This was the deadliest force of the conquest.</li></ul>
       <h3>Battle</h3>
       <ul><li>Choose a tactic each round. Guns and horses cause panic among peoples who have never seen them, but each battle teaches them to fight back.</li>
-      <li>Conquered settlements become colonies that pay tribute.</li>
+      <li>Conquered settlements become colonies. Open a colony to build and upgrade its Cabildo, barracks, walls, church, fields, mines, harbour and stables (levels 1–5). Construction takes gold and time and continues while you are away.</li>
+      <li>After a conquest, choose what to do with the defeated warriors: press them into service as <b>auxiliaries</b> who stay with you, make them the city's garrison, or release them.</li>
       <li>Battles depend on the ground: horses rule open plains but flounder in jungle and mountains, and rain fouls powder. Your men tire as a fight drags on. Wounded men may recover afterwards. Each people fights its own way: Aztecs take captives, Inca slingers strike from afar, Caribs use poisoned arrows, and Mapuche pikemen stop cavalry.</li></ul>
       <h3>Food</h3>
       <ul><li>Your crew fishes in coastal waters and rivers, and your expedition lives partly off the land as it marches. Grassland, forest and rivers are rich; deserts and mountains are poor.</li>
@@ -371,7 +445,7 @@ const UI = {
         <div>Settlements conquered: <b>${s.stats.conquered}</b></div><div>Battles won: <b>${s.stats.won}/${s.stats.battles}</b></div>
         <div>Peoples met: <b>${met}</b></div><div>Spaniards lost: <b>${fmt(s.stats.soldiersLost)}</b></div>
         <div>Baptisms: <b>${fmt(s.stats.converts || 0)}</b></div><div>Missions founded: <b>${s.settlements.filter((x) => x.converted >= 50).length}</b></div>
-        <div>Native people killed in war: <b>${fmt(s.stats.warDeaths)}</b></div><div>Native people killed by epidemics: <b>${fmt(s.stats.diseaseDeaths)}</b></div>
+        <div>Native people killed in war: <b>${fmt(s.stats.warDeaths)}</b></div><div>Native people killed in forced labour: <b>${fmt(s.stats.labourDeaths || 0)}</b></div><div>Native people killed by epidemics: <b>${fmt(s.stats.diseaseDeaths)}</b></div>
       </div>
       <p class="history">Historians estimate that the Indigenous population of the Americas fell by as much as 90% in the century after 1492 — mostly from Old World diseases such as smallpox, measles and typhus, compounded by war, forced labour and famine. Many of the peoples in this game survive today: millions of people speak Maya languages, Quechua, Guaraní, Nahuatl, Mapudungun and Aymara.</p>`;
     this.dialog(peaceful ? '🏰 The End' : `☠️ ${cause}`, html, [['New game', () => location.reload()]], true);
