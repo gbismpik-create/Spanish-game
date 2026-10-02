@@ -118,9 +118,10 @@ const Render = {
     for (const st of s.settlements) if (inView(st.x, st.y) && Game.isExplored(st.x, st.y)) this.drawSettlement(sx(st.x), sy(st.y), z, st);
     if (inView(s.port.x, s.port.y)) this.drawCastle(sx(s.port.x), sy(s.port.y), z, '#e8c040', '#b02020');
     // units
+    const moving = (u) => !!((Input.anim && Input.anim.unit === u) || (Input.path.length && Game.active() === u));
     const sp = this.unitPos(s.ship);
-    this.drawShip(sx(sp.x), sy(sp.y), z, s.ship.dir, !s.party);
-    if (s.party) { const pp = this.unitPos(s.party); this.drawParty(sx(pp.x), sy(pp.y), z, s.party.dir); }
+    this.drawShip(sx(sp.x), sy(sp.y), z, s.ship.dir, !s.party, s.shipType, moving(s.ship));
+    if (s.party) { const pp = this.unitPos(s.party); this.drawParty(sx(pp.x), sy(pp.y), z, s.party.dir, moving(s.party)); }
     // fog of war, smooth-edged
     ctx.imageSmoothingEnabled = true;
     this.blit(this.fog, 1, x0, y0, vw, vh);
@@ -168,42 +169,292 @@ const Render = {
   },
 
   // ---- sprites ----
-  drawShip(x, y, z, dir, active) {
-    const c = this.ctx, k = z / 24;
-    c.save(); c.translate(x + z / 2, y + z / 2); c.scale(dir < 0 ? -k : k, k);
-    const bob = Math.sin(this.time * 3) * 0.8;
-    c.translate(0, bob);
-    if (active) { c.fillStyle = 'rgba(255,255,255,0.18)'; c.beginPath(); c.ellipse(0, 7, 13, 4, 0, 0, 7); c.fill(); }
-    c.fillStyle = '#5a3a1e';
-    c.beginPath(); c.moveTo(-11, 2); c.lineTo(11, 2); c.lineTo(8, 8); c.lineTo(-8, 8); c.closePath(); c.fill();
-    c.fillStyle = '#7a5230'; c.fillRect(-11, 1, 22, 2);
-    c.strokeStyle = '#3a2410'; c.lineWidth = 1.2;
-    c.beginPath(); c.moveTo(0, 2); c.lineTo(0, -12); c.moveTo(-6, 2); c.lineTo(-6, -6); c.stroke();
+  // Burgundy cross flag, waving. Pole top at (px, py), flies towards +x.
+  drawFlag(c, px, py, w, h, t) {
     c.fillStyle = '#f4ecd8';
-    c.beginPath(); c.moveTo(-5, -11); c.quadraticCurveTo(0, -9, 5, -11); c.lineTo(5, -1); c.quadraticCurveTo(0, 0, -5, -1); c.closePath(); c.fill();
-    c.strokeStyle = '#c0202a'; c.lineWidth = 1.4;
-    c.beginPath(); c.moveTo(-3.5, -9); c.lineTo(3.5, -2.5); c.moveTo(3.5, -9); c.lineTo(-3.5, -2.5); c.stroke();
-    c.fillStyle = '#e9dfc6'; c.beginPath(); c.moveTo(-6, -6); c.lineTo(-10, 0); c.lineTo(-6, 0); c.fill();
-    c.fillStyle = '#d4a017'; c.fillRect(0, -15, 5, 3);
+    c.beginPath(); c.moveTo(px, py);
+    for (let i = 1; i <= 4; i++) c.lineTo(px + (w * i) / 4, py + Math.sin(t * 6 + i) * h * 0.12);
+    for (let i = 4; i >= 0; i--) c.lineTo(px + (w * i) / 4, py + h + Math.sin(t * 6 + i) * h * 0.12);
+    c.closePath(); c.fill();
+    const wv = (i) => Math.sin(t * 6 + i) * h * 0.12;
+    c.strokeStyle = '#c0202a'; c.lineWidth = Math.max(0.8, h * 0.18);
+    c.beginPath(); c.moveTo(px + w * 0.1, py + h * 0.1 + wv(0.4)); c.lineTo(px + w * 0.9, py + h * 0.9 + wv(3.6));
+    c.moveTo(px + w * 0.9, py + h * 0.1 + wv(3.6)); c.lineTo(px + w * 0.1, py + h * 0.9 + wv(0.4)); c.stroke();
+  },
+
+  // A square sail on a yard: centre x, top y, width, height, billow
+  squareSail(c, x, top, w, h, b, cross) {
+    c.fillStyle = '#efe6cf';
+    c.beginPath();
+    c.moveTo(x - w / 2, top); c.lineTo(x + w / 2, top);
+    c.quadraticCurveTo(x + w / 2 + b, top + h / 2, x + w / 2, top + h);
+    c.quadraticCurveTo(x, top + h + b * 0.6, x - w / 2, top + h);
+    c.quadraticCurveTo(x - w / 2 + b, top + h / 2, x - w / 2, top);
+    c.fill();
+    c.strokeStyle = 'rgba(120,100,70,0.5)'; c.lineWidth = 0.4; c.stroke();
+    c.strokeStyle = '#4a3018'; c.lineWidth = 0.9;
+    c.beginPath(); c.moveTo(x - w / 2 - 1, top); c.lineTo(x + w / 2 + 1, top); c.stroke();
+    if (cross) {
+      c.strokeStyle = '#c0202a'; c.lineWidth = Math.max(1, w * 0.12);
+      c.beginPath(); c.moveTo(x - w * 0.32, top + h * 0.15); c.lineTo(x + w * 0.32, top + h * 0.85);
+      c.moveTo(x + w * 0.32, top + h * 0.15); c.lineTo(x - w * 0.32, top + h * 0.85); c.stroke();
+    }
+  },
+  // A triangular lateen sail hung from a slanted yard on a mast at x
+  lateenSail(c, x, top, len, b, cross) {
+    const yx0 = x - len * 0.55, yy0 = top + len * 0.55, yx1 = x + len * 0.45, yy1 = top - len * 0.05;
+    c.fillStyle = '#efe6cf';
+    c.beginPath(); c.moveTo(yx0, yy0); c.lineTo(yx1, yy1);
+    c.quadraticCurveTo(x + b, top + len * 0.6, x, top + len * 0.85);
+    c.closePath(); c.fill();
+    c.strokeStyle = '#4a3018'; c.lineWidth = 0.9;
+    c.beginPath(); c.moveTo(yx0, yy0); c.lineTo(yx1, yy1); c.stroke();
+    if (cross) {
+      const cx = x + 0.5, cy = top + len * 0.42, r = len * 0.12;
+      c.strokeStyle = '#c0202a'; c.lineWidth = Math.max(1, r * 0.5);
+      c.beginPath(); c.moveTo(cx - r, cy); c.lineTo(cx + r, cy); c.moveTo(cx, cy - r); c.lineTo(cx, cy + r); c.stroke();
+    }
+  },
+
+  drawShip(x, y, z, dir, active, type, moving) {
+    const c = this.ctx, t = this.time;
+    const size = { caravel: 0.9, nao: 1.0, galleon: 1.12 }[type] || 1;
+    const k = (z / 24) * size;
+    c.save(); c.translate(x + z / 2, y + z / 2 + z * 0.1);
+    c.scale(dir < 0 ? -k : k, k);
+    // wake and ripples on the water (drawn before the bob so they stay flat)
+    c.strokeStyle = 'rgba(235,245,255,0.55)'; c.lineWidth = 1;
+    if (moving) {
+      for (let i = 0; i < 4; i++) {
+        const ph = (t * 2 + i / 4) % 1;
+        const wx = -18 - ph * 22, spread = 2 + ph * 7;
+        c.globalAlpha = 0.6 * (1 - ph);
+        c.beginPath(); c.moveTo(wx, 7 - spread); c.quadraticCurveTo(wx - 3, 7, wx, 7 + spread); c.stroke();
+      }
+      c.globalAlpha = 0.7;
+      c.beginPath(); c.moveTo(20, 4); c.quadraticCurveTo(16, 8, 10, 9); c.moveTo(20, 6); c.quadraticCurveTo(18, 10, 12, 11); c.stroke();
+      c.globalAlpha = 1;
+    } else {
+      const ph = (t * 0.7) % 1;
+      c.globalAlpha = 0.4 * (1 - ph);
+      c.beginPath(); c.ellipse(0, 7, 20 + ph * 6, 3 + ph * 1.5, 0, 0, 7); c.stroke();
+      c.globalAlpha = 1;
+    }
+    if (active) {
+      c.strokeStyle = `rgba(255,215,106,${0.45 + Math.sin(t * 4) * 0.2})`; c.lineWidth = 1.2;
+      c.beginPath(); c.ellipse(0, 7, 22, 4.5, 0, 0, 7); c.stroke();
+    }
+    c.fillStyle = 'rgba(10,25,40,0.35)'; c.beginPath(); c.ellipse(0, 7.5, 18, 3, 0, 0, 7); c.fill();
+    // bob and roll
+    c.translate(0, Math.sin(t * 2.6) * 0.9);
+    c.rotate(Math.sin(t * 1.9) * 0.035);
+    const big = type !== 'caravel', gal = type === 'galleon';
+    const sternH = gal ? 13 : big ? 10 : 7;
+    // hull
+    c.fillStyle = '#5b3a1f';
+    c.beginPath();
+    c.moveTo(-17, -sternH); c.lineTo(-11, -sternH); c.lineTo(-11, -3);
+    c.lineTo(big ? 9 : 12, -3);
+    if (big) { c.lineTo(9, -6); c.lineTo(15, -6); }
+    c.lineTo(18, big ? -7 : -5);
+    c.quadraticCurveTo(15, 6, 8, 8);
+    c.lineTo(-12, 8);
+    c.quadraticCurveTo(-17, 4, -17, -sternH);
+    c.fill();
+    // planking and wales
+    c.strokeStyle = 'rgba(30,18,8,0.55)'; c.lineWidth = 0.5;
+    for (const py of [0, 3, 6]) { c.beginPath(); c.moveTo(-16, py); c.lineTo(15 - py * 0.6, py); c.stroke(); }
+    c.fillStyle = '#c9a227'; c.fillRect(-16.5, -3.6, 33.5, 1.1);
+    c.fillStyle = '#7a1f1a'; c.fillRect(-16.8, -sternH, 5.8, 2.2);
+    if (big) c.fillRect(9, -6, 6, 1.6);
+    // stern windows
+    c.fillStyle = '#e8c870';
+    for (let i = 0; i < (gal ? 3 : 2); i++) c.fillRect(-15.5 + i * 1.6, -sternH + 3.5, 1, 1.6);
+    // gun ports, one per cannon carried (up to the ship's size)
+    const ports = Math.min(Game.s.cannons, gal ? 7 : big ? 5 : 2);
+    c.fillStyle = '#1e140a';
+    for (let i = 0; i < ports; i++) c.fillRect(-8 + i * (gal ? 3.2 : 4), -1.8, 1.6, 1.4);
+    // bowsprit
+    c.strokeStyle = '#3a2410'; c.lineWidth = 1;
+    c.beginPath(); c.moveTo(16, -6); c.lineTo(25, -11); c.stroke();
+    // masts, rigging and sails
+    const billow = 2.5 + Math.sin(t * 1.3) * 0.8;
+    const masts = gal ? [[11, 30], [0, 38], [-9, 26]] : big ? [[10, 26], [0, 33], [-9, 22]] : [[3, 30], [-8, 22]];
+    c.strokeStyle = 'rgba(40,25,10,0.6)'; c.lineWidth = 0.4;
+    c.beginPath();
+    for (const [mx, mh] of masts) { c.moveTo(mx, -3 - mh); c.lineTo(-16, -sternH); c.moveTo(mx, -3 - mh); c.lineTo(24, -11); }
+    c.stroke();
+    c.strokeStyle = '#3a2410'; c.lineWidth = 1.3;
+    c.beginPath();
+    for (const [mx, mh] of masts) { c.moveTo(mx, -3); c.lineTo(mx, -3 - mh); }
+    c.stroke();
+    if (type === 'caravel') {
+      // caravela latina: lateen sails marked with a red cross
+      this.lateenSail(c, 3, -31, 30, billow, true);
+      this.lateenSail(c, -8, -23, 20, billow * 0.8, false);
+    } else {
+      const [[fx, fh], [mx, mh], [zx, zh]] = masts;
+      this.squareSail(c, fx, -3 - fh + 3, 11, 10, billow, false);
+      if (gal) this.squareSail(c, fx, -3 - fh + 14, 13, 8, billow, false);
+      this.squareSail(c, mx, -3 - mh + 4, 12, 11, billow, false);
+      this.squareSail(c, mx, -3 - mh + 16, 16, 13, billow, true);
+      this.lateenSail(c, zx, -3 - zh + 2, 18, billow * 0.7, false);
+      c.fillStyle = '#efe6cf';
+      c.beginPath(); c.moveTo(17, -7); c.lineTo(24, -10); c.lineTo(22, -5); c.closePath(); c.fill();
+    }
+    // pennant on the mainmast and ensign at the stern
+    const top = masts[gal || big ? 1 : 0];
+    c.fillStyle = '#c0202a';
+    c.beginPath(); c.moveTo(top[0], -3 - top[1]);
+    c.quadraticCurveTo(top[0] - 5, -3 - top[1] - 1 + Math.sin(t * 7) * 1.2, top[0] - 11, -3 - top[1] + Math.sin(t * 7 + 1) * 1.5);
+    c.lineTo(top[0], -3 - top[1] + 2); c.fill();
+    c.strokeStyle = '#3a2410'; c.lineWidth = 0.8;
+    c.beginPath(); c.moveTo(-17, -sternH); c.lineTo(-19, -sternH - 9); c.stroke();
+    c.save(); c.scale(-1, 1); this.drawFlag(c, 19, -sternH - 9, 7, 5, t); c.restore();
     c.restore();
   },
-  drawParty(x, y, z, dir) {
-    const c = this.ctx, k = z / 24;
-    c.save(); c.translate(x + z / 2, y + z / 2); c.scale(k, k);
-    c.fillStyle = 'rgba(0,0,0,0.25)'; c.beginPath(); c.ellipse(0, 9, 11, 3, 0, 0, 7); c.fill();
-    const fig = (fx, col) => {
-      c.fillStyle = col; c.fillRect(fx - 2.5, -1, 5, 7);
-      c.fillStyle = '#3a2a1a'; c.fillRect(fx - 2, 6, 1.6, 3); c.fillRect(fx + 0.4, 6, 1.6, 3);
-      c.fillStyle = '#e0b890'; c.beginPath(); c.arc(fx, -3, 2.2, 0, 7); c.fill();
-      c.fillStyle = '#c8ccd2'; c.beginPath(); c.ellipse(fx, -4.6, 3.6, 1.4, 0, 0, 7); c.fill();
-      c.fillRect(fx - 0.6, -7, 1.2, 2);
-    };
-    fig(-6, '#a8322a'); fig(6, '#a8322a'); fig(0, '#d0a020');
-    c.strokeStyle = '#3a2410'; c.lineWidth = 1; c.beginPath(); c.moveTo(3, 6); c.lineTo(3, -14); c.stroke();
-    c.fillStyle = '#f4ecd8'; c.fillRect(3, -14, 8 * (dir < 0 ? -1 : 1), 6);
-    c.strokeStyle = '#c0202a'; c.beginPath();
-    const fx = dir < 0 ? -1 : 1;
-    c.moveTo(3, -14); c.lineTo(3 + 8 * fx, -8); c.moveTo(3 + 8 * fx, -14); c.lineTo(3, -8); c.stroke();
+
+  // ---- people ----
+  figSoldier(c, fx, fy, step, i, kind) {
+    const legA = step * 1.6;
+    c.strokeStyle = '#3a2a1a'; c.lineWidth = 1.4;
+    c.beginPath(); c.moveTo(fx - 0.8, fy - 5); c.lineTo(fx - 1.2 + legA, fy); c.moveTo(fx + 0.8, fy - 5); c.lineTo(fx + 1.2 - legA, fy); c.stroke();
+    c.fillStyle = i % 2 ? '#b8862a' : '#a8322a'; // puffed breeches
+    c.beginPath(); c.ellipse(fx, fy - 5.5, 2.6, 1.6, 0, 0, 7); c.fill();
+    c.fillStyle = kind === 'arq' ? '#7a5a3a' : '#a8322a'; c.fillRect(fx - 2.4, fy - 11, 4.8, 5.5);
+    c.fillStyle = '#b8bec6'; c.fillRect(fx - 2.4, fy - 11, 4.8, 3.6); // cuirass
+    c.fillStyle = 'rgba(255,255,255,0.5)'; c.fillRect(fx - 1.6, fy - 10.6, 1, 2.6);
+    c.fillStyle = '#e0b890'; c.beginPath(); c.arc(fx + 0.3, fy - 13, 1.8, 0, 7); c.fill();
+    if (kind === 'arq') {
+      c.fillStyle = '#2a2018'; c.beginPath(); c.ellipse(fx + 0.3, fy - 14.4, 3.4, 0.9, 0, 0, 7); c.fill();
+      c.fillRect(fx - 1.2, fy - 16.6, 3, 2.4);
+      c.strokeStyle = '#5a3a1e'; c.lineWidth = 1.2;
+      c.beginPath(); c.moveTo(fx - 1, fy - 7.5); c.lineTo(fx + 4, fy - 10); c.stroke();
+      c.strokeStyle = '#2a2a2a'; c.lineWidth = 0.8;
+      c.beginPath(); c.moveTo(fx + 4, fy - 10); c.lineTo(fx + 9, fy - 12.5); c.stroke();
+    } else {
+      // morion helmet with crest
+      c.fillStyle = '#c8ccd2';
+      c.beginPath(); c.ellipse(fx + 0.3, fy - 14.3, 3.6, 1.1, 0, 0, 7); c.fill();
+      c.beginPath(); c.arc(fx + 0.3, fy - 14.3, 2, Math.PI, 0); c.fill();
+      c.fillStyle = '#e8ecf0'; c.fillRect(fx, fy - 17.2, 0.8, 2.4);
+      // pike
+      c.strokeStyle = '#6b4a2a'; c.lineWidth = 0.9;
+      c.beginPath(); c.moveTo(fx + 2.6, fy - 2); c.lineTo(fx + 4.6, fy - 27); c.stroke();
+      c.fillStyle = '#d8dde2';
+      c.beginPath(); c.moveTo(fx + 4.6, fy - 30); c.lineTo(fx + 5.4, fy - 26.5); c.lineTo(fx + 3.9, fy - 26.6); c.fill();
+    }
+  },
+  figBanner(c, fx, fy, step, t) {
+    this.figSoldier(c, fx, fy, step, 1, 'pike');
+    c.strokeStyle = '#4a3018'; c.lineWidth = 1;
+    c.beginPath(); c.moveTo(fx - 2.4, fy - 4); c.lineTo(fx - 2.4, fy - 32); c.stroke();
+    this.drawFlag(c, fx - 2.4, fy - 32, 11, 7.5, t);
+  },
+  figFriar(c, fx, fy, step) {
+    c.fillStyle = '#6b4a2e';
+    c.beginPath(); c.moveTo(fx - 3.4 + step * 0.4, fy); c.lineTo(fx + 3.4 - step * 0.4, fy); c.lineTo(fx + 1.8, fy - 11); c.lineTo(fx - 1.8, fy - 11); c.fill();
+    c.strokeStyle = '#e8dcc0'; c.lineWidth = 0.6;
+    c.beginPath(); c.moveTo(fx - 2, fy - 7); c.lineTo(fx + 2, fy - 7); c.lineTo(fx + 1, fy - 3.5); c.stroke();
+    c.fillStyle = '#5a3c24'; c.beginPath(); c.arc(fx, fy - 12.6, 2.6, 0, 7); c.fill();
+    c.fillStyle = '#e0b890'; c.beginPath(); c.arc(fx + 0.7, fy - 12.6, 1.6, 0, 7); c.fill();
+    c.fillStyle = '#d4a017'; c.fillRect(fx + 2.6, fy - 11, 0.8, 4); c.fillRect(fx + 1.7, fy - 10, 2.6, 0.8);
+  },
+  figNative(c, fx, fy, step, i, enemy) {
+    const skin = ['#9a6040', '#8a5434', '#a86a46'][i % 3];
+    const legA = step * 1.6;
+    c.strokeStyle = skin; c.lineWidth = 1.3;
+    c.beginPath(); c.moveTo(fx - 0.8, fy - 5); c.lineTo(fx - 1.2 + legA, fy); c.moveTo(fx + 0.8, fy - 5); c.lineTo(fx + 1.2 - legA, fy); c.stroke();
+    c.fillStyle = i % 2 ? '#ece4cc' : '#d8c8a0'; c.fillRect(fx - 2.3, fy - 7, 4.6, 2.6); // cotton armour / loincloth
+    c.fillStyle = skin; c.fillRect(fx - 2, fy - 11, 4, 4.4);
+    c.beginPath(); c.arc(fx + 0.2, fy - 12.8, 1.7, 0, 7); c.fill();
+    c.fillStyle = '#1a1410'; c.beginPath(); c.arc(fx + 0.1, fy - 13.4, 1.6, Math.PI, 0); c.fill();
+    const feathers = enemy ? ['#2e8b57', '#d4a017', '#2e8b57'] : ['#c0392b', '#d4a017', '#2e8b57'];
+    for (let j = 0; j < 3; j++) {
+      c.strokeStyle = feathers[j]; c.lineWidth = 1;
+      c.beginPath(); c.moveTo(fx, fy - 14); c.lineTo(fx - 2 + j * 2, fy - 18.5 + Math.abs(j - 1)); c.stroke();
+    }
+    if (i % 2) { // bow
+      c.strokeStyle = '#5a3a1e'; c.lineWidth = 0.9;
+      c.beginPath(); c.arc(fx + 2.5, fy - 9, 4.5, -1.2, 1.2); c.stroke();
+      c.strokeStyle = 'rgba(240,230,200,0.7)'; c.lineWidth = 0.3;
+      c.beginPath(); c.moveTo(fx + 2.5 + 4.5 * Math.cos(-1.2), fy - 9 + 4.5 * Math.sin(-1.2)); c.lineTo(fx + 2.5 + 4.5 * Math.cos(1.2), fy - 9 + 4.5 * Math.sin(1.2)); c.stroke();
+    } else { // round shield and club
+      c.fillStyle = enemy ? '#2e6b8a' : '#c0392b'; c.beginPath(); c.arc(fx - 2.2, fy - 8.5, 2.4, 0, 7); c.fill();
+      c.strokeStyle = '#f0e0b0'; c.lineWidth = 0.5; c.beginPath(); c.arc(fx - 2.2, fy - 8.5, 1.4, 0, 7); c.stroke();
+      c.strokeStyle = '#4a3018'; c.lineWidth = 1.1;
+      c.beginPath(); c.moveTo(fx + 1.8, fy - 8); c.lineTo(fx + 4.5, fy - 15); c.stroke();
+    }
+  },
+  figRider(c, fx, fy, step, i) {
+    const coat = ['#6b4226', '#e4dccc', '#2a1d14', '#8a5a30'][i % 4];
+    const g = step * 2;
+    c.strokeStyle = coat === '#e4dccc' ? '#b8ae9c' : coat; c.lineWidth = 1.3;
+    c.beginPath();
+    c.moveTo(fx - 4.5, fy - 5); c.lineTo(fx - 5.5 + g, fy);
+    c.moveTo(fx - 3, fy - 5); c.lineTo(fx - 2.5 - g, fy);
+    c.moveTo(fx + 3.5, fy - 5); c.lineTo(fx + 4.5 - g, fy);
+    c.moveTo(fx + 5, fy - 5); c.lineTo(fx + 5.5 + g, fy);
+    c.stroke();
+    c.fillStyle = coat;
+    c.beginPath(); c.ellipse(fx, fy - 6.8, 6.5, 2.8, 0, 0, 7); c.fill();
+    c.beginPath(); c.moveTo(fx + 4, fy - 8.5); c.lineTo(fx + 7.6, fy - 13); c.lineTo(fx + 9, fy - 12); c.lineTo(fx + 6.5, fy - 6); c.fill();
+    c.beginPath(); c.ellipse(fx + 9, fy - 12.4, 2.4, 1.2, 0.5, 0, 7); c.fill();
+    c.strokeStyle = '#1a1410'; c.lineWidth = 1;
+    c.beginPath(); c.moveTo(fx - 6.4, fy - 7.5); c.quadraticCurveTo(fx - 9, fy - 6, fx - 8.5, fy - 2.5); c.stroke();
+    c.fillStyle = '#a8322a'; c.fillRect(fx - 3, fy - 9.5, 5, 2.4); // saddle cloth
+    // rider
+    c.fillStyle = '#b8bec6'; c.fillRect(fx - 1.8, fy - 15.5, 3.8, 6);
+    c.fillStyle = '#e0b890'; c.beginPath(); c.arc(fx + 0.2, fy - 17.2, 1.7, 0, 7); c.fill();
+    c.fillStyle = '#c8ccd2'; c.beginPath(); c.ellipse(fx + 0.2, fy - 18.4, 3.2, 1, 0, 0, 7); c.fill();
+    c.beginPath(); c.arc(fx + 0.2, fy - 18.4, 1.8, Math.PI, 0); c.fill();
+    c.strokeStyle = '#6b4a2a'; c.lineWidth = 0.9;
+    c.beginPath(); c.moveTo(fx - 5, fy - 11); c.lineTo(fx + 15, fy - 20); c.stroke();
+    c.fillStyle = '#d8dde2'; c.beginPath(); c.moveTo(fx + 17, fy - 21); c.lineTo(fx + 14.4, fy - 20.6); c.lineTo(fx + 15.2, fy - 19.2); c.fill();
+  },
+
+  // the expedition: a formation that reflects the real army
+  drawParty(x, y, z, dir, moving) {
+    const c = this.ctx, s = Game.s, t = this.time;
+    const k = (z / 24) * 1.25;
+    c.save(); c.translate(x + z / 2, y + z / 2 + z * 0.2); c.scale(dir < 0 ? -k : k, k);
+    const figs = [];
+    const nArq = s.soldiers > 0 ? Math.min(3, Math.ceil((s.arquebuses / Math.max(1, s.soldiers)) * 4)) : 0;
+    const nSol = clamp(Math.ceil(s.soldiers / 12), 1, 7);
+    const nRid = s.horses > 0 ? Math.min(3, Math.ceil(s.horses / 8)) : 0;
+    const nAll = s.allies > 0 ? Math.min(6, Math.ceil(s.allies / 120)) : 0;
+    // back rows first: allies on the far flank, friar and standard in the middle, soldiers in front
+    for (let i = 0; i < nAll; i++) figs.push({ kind: 'native', x: -24 + (i % 3) * 6.5 + (i > 2 ? 3 : 0), y: -6 + Math.floor(i / 3) * 7 });
+    figs.push({ kind: 'banner', x: 0, y: -7 });
+    if (s.priests > 0) figs.push({ kind: 'friar', x: -8, y: -5 });
+    for (let i = 0; i < nSol; i++) {
+      const row = Math.floor(i / 4), col = i % 4;
+      figs.push({ kind: i < nArq ? 'arq' : 'pike', x: -6 + col * 7 + (row % 2) * 3.5, y: -1 + row * 6.5 });
+    }
+    for (let i = 0; i < nRid; i++) figs.push({ kind: 'rider', x: 25 - (i % 2) * 5, y: -6 + i * 7 });
+    figs.sort((a, b) => a.y - b.y);
+    // shadow, selection ring, dust
+    c.fillStyle = 'rgba(0,0,0,0.25)';
+    c.beginPath(); c.ellipse(1, 5, 31, 8, 0, 0, 7); c.fill();
+    c.strokeStyle = `rgba(255,215,106,${0.45 + Math.sin(t * 4) * 0.2})`; c.lineWidth = 1.2;
+    c.beginPath(); c.ellipse(1, 5, 33, 9, 0, 0, 7); c.stroke();
+    if (moving) {
+      for (let i = 0; i < 5; i++) {
+        const ph = (t * 1.5 + i / 5) % 1;
+        c.fillStyle = `rgba(205,185,145,${0.35 * (1 - ph)})`;
+        c.beginPath(); c.arc(-30 - ph * 10, 6 - ph * 5 + (i % 2) * 3, 2 + ph * 4, 0, 7); c.fill();
+      }
+    }
+    figs.forEach((f, i) => {
+      const step = moving ? Math.sin(t * 12 + i * 1.7) : 0;
+      const bob = moving ? -Math.abs(Math.sin(t * 12 + i * 1.7)) * 0.6 : 0;
+      const fy = f.y + 6 + bob;
+      if (f.kind === 'pike' || f.kind === 'arq') this.figSoldier(c, f.x, fy, step, i, f.kind);
+      else if (f.kind === 'banner') this.figBanner(c, f.x, fy, step, t);
+      else if (f.kind === 'friar') this.figFriar(c, f.x, fy, step);
+      else if (f.kind === 'native') this.figNative(c, f.x, fy, step, i, false);
+      else this.figRider(c, f.x, fy, step, i);
+    });
     c.restore();
   },
   drawCastle(x, y, z, flag, flag2) {

@@ -70,6 +70,7 @@ The playable claude.ai artifact is a single bundled HTML file: the `<body>` of `
 
 **Done**
 - Map, ship and party movement, fog of war, minimap
+- Detailed sprites: a distinct look per ship type with a wake; the expedition drawn as a marching formation built from the real army
 - Sea and land events, discoveries, ruins and artifacts
 - Diplomacy, disease, conquest, friars, colonies
 - Turn-based battles with tactics and per-culture war styles
