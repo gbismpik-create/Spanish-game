@@ -34,6 +34,18 @@ const UI = {
     $('#modal-bg').addEventListener('click', (e) => { if (e.target.id === 'modal-bg' && this.closable) this.close(); });
   },
 
+  // live countdowns on construction timers
+  tickTimers() {
+    const now = Date.now();
+    document.querySelectorAll('.timer[data-done]').forEach((el) => { el.textContent = `${fmtDuration(+el.dataset.done - now)} left`; });
+    document.querySelectorAll('.timer-bar[data-done]').forEach((el) => {
+      el.style.width = `${Math.round(clamp(1 - (+el.dataset.done - now) / +el.dataset.ms, 0, 1) * 100)}%`;
+    });
+  },
+  buildingDone(st) {
+    if (this.open && this.colonyOpen && this.colonyOpen.st === st) this.colonyDialog(st, this.colonyOpen.fromShip);
+  },
+
   closeMore() { $('#actions').classList.remove('more-open'); },
 
   refresh() {
@@ -98,6 +110,7 @@ const UI = {
   dialog(title, html, buttons = [], noBgClose = false, actions = {}) {
     this.open = true;
     this.townOpen = false;
+    this.colonyOpen = null;
     this.closable = !noBgClose;
     Input.stop();
     const m = $('#modal');
@@ -245,11 +258,11 @@ const UI = {
     const queue = st.queue.map((q, i) => {
       const B = BUILDINGS[q.b];
       if (i === 0) {
-        const left = Math.max(0, Math.ceil(q.done - s.day));
-        const pct = Math.round((1 - left / q.days) * 100);
-        return `<div class="q-item"><span>${B.icon} ${B.name} → level ${q.level}</span><div class="bar"><div style="width:${pct}%;background:#c9a227"></div></div><small>${left} days left</small></div>`;
+        const left = q.done - Date.now();
+        const pct = Math.round((1 - left / q.ms) * 100);
+        return `<div class="q-item"><span>${B.icon} ${B.name} → level ${q.level}</span><div class="bar"><div class="timer-bar" data-done="${q.done}" data-ms="${q.ms}" style="width:${pct}%;background:#c9a227"></div></div><small class="timer" data-done="${q.done}">${fmtDuration(left)} left</small></div>`;
       }
-      return `<div class="q-item"><span>${B.icon} ${B.name} → level ${q.level}</span><small>waiting · ${q.days} days</small></div>`;
+      return `<div class="q-item"><span>${B.icon} ${B.name} → level ${q.level}</span><small>waiting · ${fmtDuration(q.ms)}</small></div>`;
     }).join('') || '<div class="small">No construction under way. Choose a building below.</div>';
     // building cards
     const cards = Object.entries(BUILDINGS).map(([id, B]) => {
@@ -259,7 +272,7 @@ const UI = {
       act['build-' + id] = () => { Game.startBuild(st, id); re(); };
       const pips = [1, 2, 3, 4, 5].map((n) => `<i class="${n <= lvl ? 'on' : n < next ? 'q' : ''}"></i>`).join('');
       const btn = cost && block !== 'Maximum level' && block !== 'Needs a coast'
-        ? `<button data-act="build-${id}" ${block ? 'disabled' : ''} title="${block || ''}">${next > 1 ? 'Upgrade' : 'Build'} to ${next} · ${fmt(cost.gold)} · ${cost.days}d</button>${block ? `<small class="why">${block}</small>` : ''}`
+        ? `<button data-act="build-${id}" ${block ? 'disabled' : ''} title="${block || ''}">${next > 1 ? 'Upgrade' : 'Build'} to ${next} · ${fmt(cost.gold)} · ${fmtDuration(cost.ms)}</button>${block ? `<small class="why">${block}</small>` : ''}`
         : `<small class="why">${block}</small>`;
       return `<div class="bcard${lvl ? ' built' : ''}"><div class="bhead"><span class="bicon">${B.icon}</span><b>${B.name}</b><span class="pips">${pips}</span></div>
         <p>${B.desc}</p><div class="beff">${this.buildingEffect(st, id, lvl)}</div>${btn}</div>`;
@@ -315,10 +328,11 @@ const UI = {
       <h3>Buildings</h3><div class="bgrid">${cards}</div>
       <h3>Services</h3><div class="svc">${svc.join('')}</div>
       <h3>Garrison</h3><div class="svc">${gar.join('')}</div>
-      <p class="small">Building costs are paid from the city treasury first, then your purse. Upgrades continue while you are away.</p>
+      <p class="small">Building costs are paid from the city treasury first, then your purse. Construction runs in real time and continues while the game is closed.</p>
       ${b.mine ? `<p class="flavor">Under the encomienda and the mita, the people of ${st.name} are forced to dig in the mines. ${fmt(Game.s.stats.labourDeaths)} have died in forced labour across your colonies.</p>` : ''}`;
     this.dialog(`🏰 ${st.name}`, html, [['Leave', () => this.close()]], false, act);
     this.townOpen = true;
+    this.colonyOpen = { st, fromShip };
   },
 
   // ------------------------------------------------------------ Sevilla

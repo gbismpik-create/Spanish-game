@@ -11,6 +11,15 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const randi = (a, b) => Math.floor(rand(a, b + 1));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
+// real time, e.g. "45s", "4m 30s", "2h 15m"
+const fmtDuration = (ms) => {
+  const t = Math.max(0, Math.ceil(ms / 1000));
+  if (t < 60) return `${t}s`;
+  const m = Math.floor(t / 60), sec = t % 60;
+  if (m < 60) return sec && m < 10 ? `${m}m ${sec}s` : `${m}m`;
+  const h = Math.floor(m / 60), mm = m % 60;
+  return mm ? `${h}h ${mm}m` : `${h}h`;
+};
 
 const Game = {
   s: null,
@@ -666,6 +675,10 @@ const Game = {
   ensureColony(st) {
     if (!st.buildings) st.buildings = Object.fromEntries(Object.keys(BUILDINGS).map((k) => [k, 0]));
     if (!st.queue) st.queue = [];
+    // older saves timed construction in game days: restart those jobs on the real clock
+    st.queue.forEach((q, i) => {
+      if (q.ms == null) { q.ms = BUILD_MINUTES[q.level - 1] * 60000; delete q.days; q.done = i === 0 ? Date.now() + q.ms : null; }
+    });
     if (!st.garrison) st.garrison = { soldiers: 0, aux: 0 };
     if (st.store == null) st.store = 0;
     if (st.auxPool == null) st.auxPool = 0;
@@ -697,7 +710,7 @@ const Game = {
   queuedLevel(st, id) { return st.buildings[id] + st.queue.filter((q) => q.b === id).length; },
   buildCost(id, level) {
     const B = BUILDINGS[id];
-    return { gold: Math.round(B.cost * BUILD_COST_MULT[level - 1]), days: Math.round(B.days * BUILD_DAYS_MULT[level - 1]) };
+    return { gold: Math.round(B.cost * BUILD_COST_MULT[level - 1]), ms: BUILD_MINUTES[level - 1] * 60000 };
   },
   // returns why a building cannot be upgraded, or null
   buildBlock(st, id) {
@@ -712,23 +725,30 @@ const Game = {
   startBuild(st, id) {
     if (this.buildBlock(st, id)) return;
     const s = this.s, level = this.queuedLevel(st, id) + 1;
-    const { gold, days } = this.buildCost(id, level);
+    const { gold, ms } = this.buildCost(id, level);
     const fromCity = Math.min(st.treasury, gold);
     st.treasury -= fromCity;
     this.spend(gold - fromCity);
-    st.queue.push({ b: id, level, days, done: st.queue.length ? null : s.day + days });
-    this.log(`Construction begins in ${st.name}: ${BUILDINGS[id].name} level ${level} (${days} days).`, '');
+    st.queue.push({ b: id, level, ms, done: st.queue.length ? null : Date.now() + ms });
+    this.log(`Construction begins in ${st.name}: ${BUILDINGS[id].name} level ${level} (${fmtDuration(ms)}).`, '');
+    void s;
   },
+  // construction runs on the real clock, so it also progresses while the game is closed
   tickBuilds() {
-    const s = this.s;
+    if (!this.s) return;
+    const now = Date.now();
     for (const st of this.colonies()) {
       if (!st.queue || !st.queue.length) continue;
-      while (st.queue.length && st.queue[0].done != null && st.queue[0].done <= s.day) {
+      let changed = false;
+      while (st.queue.length && st.queue[0].done != null && st.queue[0].done <= now) {
         const q = st.queue.shift();
         st.buildings[q.b] = q.level;
+        changed = true;
         this.log(`${st.name}: ${BUILDINGS[q.b].name} level ${q.level} is complete.`, 'good');
-        if (st.queue.length) st.queue[0].done = q.done + st.queue[0].days;
+        UI.toast(`🔨 ${st.name}: ${BUILDINGS[q.b].name} level ${q.level} is complete`);
+        if (st.queue.length) st.queue[0].done = q.done + st.queue[0].ms;
       }
+      if (changed) UI.buildingDone(st);
     }
   },
   garrisonStrength(st) {

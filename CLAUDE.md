@@ -83,7 +83,7 @@ The playable claude.ai artifact is a single bundled HTML file: the `<body>` of `
 - Detailed sprites: a distinct look per ship type with a wake; the expedition drawn as a marching formation built from the real army
 - Sea and land events, discoveries, ruins and artifacts
 - Diplomacy, disease, conquest, friars
-- Colony city screen (Grepolis-style): 8 buildings with levels 1–5, a 2-slot construction queue paid in gold and game time, monthly production, garrisons; colonies grow on the map
+- Colony city screen (Grepolis-style): 8 buildings with levels 1–5, a 2-slot construction queue paid in gold and real (wall-clock) time — 1m, 5m, 20m, 1h, 3h by level (`BUILD_MINUTES`), continuing while the game is closed — monthly production, garrisons; colonies grow on the map
 - Native counter-attacks: visible war parties, raids on colonies (garrison and walls auto-resolve, or the player leads the defence), counter-offensives, revolts
 - After a conquest: press warriors into service as auxiliaries (permanent, paid, take berths), garrison them, or release them
 - Turn-based battles with tactics and per-culture war styles; a battle report with force tables (now / start / last-round change), a balance-of-power bar and a one-line round summary

@@ -872,6 +872,9 @@ const Main = {
       Input.update(dt);
       Render.frame(dt);
       Sound.update(dt, Main.scene());
+      // real-time construction: check every half second
+      Main.tick = (Main.tick || 0) + dt;
+      if (Main.tick > 0.5) { Main.tick = 0; Game.tickBuilds(); UI.tickTimers(); }
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
