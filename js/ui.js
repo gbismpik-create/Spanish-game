@@ -10,7 +10,7 @@ const UI = {
 
   init() {
     $('#btn-land').addEventListener('click', () => Input.landOrEmbark());
-    $('#btn-center').addEventListener('click', () => { Render.free = false; });
+    $('#btn-center').addEventListener('click', () => Render.centerOnUnit());
     $('#btn-codex').addEventListener('click', () => this.codex());
     $('#btn-disc').addEventListener('click', () => this.discoveriesDialog());
     $('#btn-careen').addEventListener('click', () => this.careen());

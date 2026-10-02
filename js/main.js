@@ -39,6 +39,16 @@ const Render = {
     }
     this.zoom = nz;
   },
+  // snap the view to the ship or expedition and mark it with a pulse
+  centerOnUnit() {
+    if (!Game.s) return;
+    const u = Game.active();
+    this.free = false;
+    this.cx = u.x + 0.5; this.cy = u.y + 0.5;
+    const normal = Math.min(window.innerWidth, window.innerHeight) < 600 ? 20 : 24;
+    if (this.zoom < normal * 0.7 || this.zoom > normal * 1.8) this.zoom = normal;
+    this.pulseAt = this.time;
+  },
   screenToTile(px, py) {
     return { x: Math.floor(this.cx + (px - this.cw / 2) / this.zoom), y: Math.floor(this.cy + (py - this.ch / 2) / this.zoom) };
   },
@@ -129,6 +139,16 @@ const Render = {
     const sp = this.unitPos(s.ship);
     this.drawShip(sx(sp.x), sy(sp.y), z, s.ship.dir, !s.party, s.shipType, moving(s.ship));
     if (s.party) { const pp = this.unitPos(s.party); this.drawParty(sx(pp.x), sy(pp.y), z, s.party.dir, moving(s.party)); }
+    // "you are here" pulse after pressing the centre button
+    if (this.pulseAt != null && this.time - this.pulseAt < 1.6) {
+      const up2 = this.unitPos(Game.active()), px = sx(up2.x + 0.5), py = sy(up2.y + 0.5);
+      for (let i = 0; i < 2; i++) {
+        const t = (this.time - this.pulseAt) / 1.6 - i * 0.25;
+        if (t < 0 || t > 1) continue;
+        ctx.strokeStyle = `rgba(255,215,106,${1 - t})`; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(px, py, z * (0.6 + t * 2.2), 0, 7); ctx.stroke();
+      }
+    }
     // fog of war, smooth-edged
     ctx.imageSmoothingEnabled = true;
     this.blit(this.fog, 1, x0, y0, vw, vh);
@@ -678,7 +698,7 @@ const Input = {
       this.pending = null;
       this.path = [{ x: u.x + dirs[k][0], y: u.y + dirs[k][1] }];
       Render.free = false;
-    } else if (k === ' ') { e.preventDefault(); Render.free = false; }
+    } else if (k === ' ') { e.preventDefault(); Render.centerOnUnit(); }
     else if (k === 'l') this.landOrEmbark();
     else if (k === 'f') Game.forage();
     else if (k === '+' || k === '=') Render.zoomBy(1.25);
