@@ -166,7 +166,7 @@ const UI = {
     }, s.goods < 10]);
     actions.push(['🤝 Trade goods for gold', () => {
       s.goods -= 10;
-      const g = Math.min(st.gold, Math.round(rand(15, 30) * ({ village: 1, town: 2, city: 3, capital: 4 })[st.type]));
+      const g = Math.min(st.gold, Math.round(rand(30, 60) * ({ village: 1, town: 2, city: 3, capital: 4 })[st.type]));
       st.gold -= g; s.treasure += g; Game.changeRel(st.culture, 4);
       Game.log(`Traded 10 goods at ${st.name} for ${g} in gold.`, 'good'); enc();
     }, s.goods < 10 || cs.rel < -20 || st.gold <= 0, 'Requires 10 trade goods and a non-hostile attitude']);
@@ -199,7 +199,7 @@ const UI = {
     actions.push(['📜 Demand tribute', () => {
       const p = clamp(ratio - 0.3, 0.05, 0.95);
       if (Math.random() < p) {
-        const g = Math.round(st.gold * 0.35); st.gold -= g; s.treasure += g;
+        const g = Math.round(st.gold * 0.5); st.gold -= g; s.treasure += g;
         Game.changeRel(st.culture, -20);
         Game.log(`Intimidated, ${st.name} hands over ${g} in gold. They will not forget this.`, 'warn'); enc();
       } else {
@@ -226,7 +226,7 @@ const UI = {
       case 'walls': return `Garrison +${lvl * 25}% stronger`;
       case 'church': return `+${lvl}% Christians/month · faster preaching`;
       case 'fields': return `+${30 * lvl} provisions/month (store ${150 * lvl})`;
-      case 'mine': return `+${[0, 25, 55, 95, 150, 220][lvl]} gold/month · ${(0.4 * lvl).toFixed(1)}% of workers die each month`;
+      case 'mine': return `+${MINE_GOLD[lvl]} gold/month · ${(0.4 * lvl).toFixed(1)}% of workers die each month`;
       case 'harbor': return `Repairs 1 per point${lvl >= 3 ? ' · builds naos' : ''}${lvl >= 5 ? ' & galleons' : ''}`;
       case 'stables': return `+${lvl} horses/month (up to ${4 * lvl})`;
       default: return T ? '' : '';

@@ -211,10 +211,10 @@ const SETTLEMENTS = [
 ];
 
 const SETTLEMENT_TYPES = {
-  village: { label: 'Village', pop: [800, 2000], gold: [60, 160], fame: 10, income: 4 },
-  town: { label: 'Town', pop: [4000, 10000], gold: [300, 900], fame: 30, income: 12 },
-  city: { label: 'City', pop: [20000, 45000], gold: [2000, 5000], fame: 80, income: 35 },
-  capital: { label: 'Imperial Capital', pop: [90000, 140000], gold: [15000, 25000], fame: 300, income: 120 },
+  village: { label: 'Village', pop: [800, 2000], gold: [100, 250], fame: 10, income: 8 },
+  town: { label: 'Town', pop: [4000, 10000], gold: [500, 1300], fame: 30, income: 24 },
+  city: { label: 'City', pop: [20000, 45000], gold: [3000, 7000], fame: 80, income: 70 },
+  capital: { label: 'Imperial Capital', pop: [90000, 140000], gold: [15000, 25000], fame: 300, income: 240 },
 };
 
 // Named ancient sites: [name, lon, lat, artifactId]
@@ -368,6 +368,7 @@ const BUILDINGS = {
   harbor: { name: 'Harbour', icon: '⚓', cost: 250, days: 35, coastal: true, desc: 'Cheap ship repairs. At level 3 shipwrights build naos here, at level 5 galleons.' },
   stables: { name: 'Stables', icon: '🐎', cost: 220, days: 30, desc: 'Breeds horses from Spanish stock, sold here more cheaply than in Sevilla.' },
 };
+const MINE_GOLD = [0, 40, 85, 145, 225, 330]; // gold per month by mine level
 const BUILD_COST_MULT = [1, 2, 4, 7, 12];
 const BUILD_DAYS_MULT = [1, 1.5, 2, 3, 4];
 

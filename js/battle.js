@@ -249,7 +249,10 @@ const Battle = {
         UI.refresh();
         return;
       }
-      UI.dialog('Victory', `${log}<p><b>The warriors scatter.</b></p>${woundNote}<p class="small">${summary}</p>`, [['Continue', () => UI.close()]]);
+      const spoils = Math.round(B.kills * rand(0.25, 0.5));
+      s.treasure += spoils;
+      if (spoils > 0) Game.log(`Gold ornaments worth ${fmt(spoils)} are taken from the battlefield.`, 'good');
+      UI.dialog('Victory', `${log}<p><b>The warriors scatter.</b> Gold ornaments worth <b>${fmt(spoils)}</b> are taken from the battlefield.</p>${woundNote}<p class="small">${summary}</p>`, [['Continue', () => UI.close()]]);
     } else {
       Game.log(`Defeat against the ${B.cul.name}. ${summary}`, 'bad');
       UI.dialog('Defeat', `${log}<p><b>Your expedition falls back.</b></p>${woundNote}<p class="small">${summary}</p>`, [['Continue', () => UI.close()]]);

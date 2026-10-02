@@ -21,7 +21,7 @@ const Game = {
     const s = {
       captain: captain || 'Capitán',
       day: 0, lastMonth: null,
-      ducats: 500, treasure: 0,
+      ducats: 800, treasure: 0,
       soldiers: 40, horses: 4, arquebuses: 10, cannons: 1, allies: 0, auxiliaries: 0,
       food: 260, goods: 60, priests: 1,
       shipType: 'caravel', hull: 100,
@@ -557,14 +557,14 @@ const Game = {
       this.log(`ARTIFACT found at ${r.name}: ${a.name}.`, 'artifact');
       this.addFame(a.fame, a.name);
       if (r.named) {
-        const g = randi(80, 300); s.treasure += g;
+        const g = randi(150, 450); s.treasure += g;
         body += `<p>Your men also gather offerings worth <b>${g}</b> in gold and silver.</p>`;
       }
       if (r.artifact === 'youth_water') body += '<p>Your soldiers splash in the spring with great hope. Nothing happens.</p>';
     } else {
       const roll = Math.random();
       if (roll < 0.4) {
-        const g = randi(80, 400); s.treasure += g;
+        const g = randi(150, 600); s.treasure += g;
         body += `<p>Beneath a fallen altar your men uncover a cache of gold ornaments worth <b>${g}</b>.</p>`;
         this.log(`Found ${g} in gold at ${r.name}.`, 'good');
       } else if (roll < 0.7) {
@@ -687,7 +687,7 @@ const Game = {
     if (b.stables) st.horsesAvail = Math.min(4 * b.stables, st.horsesAvail + b.stables);
     if (b.church) st.converted = Math.min(100, st.converted + b.church);
     if (b.mine) {
-      st.treasury += Math.round([0, 25, 55, 95, 150, 220][b.mine] * popF);
+      st.treasury += Math.round(MINE_GOLD[b.mine] * popF);
       const dead = Math.round(st.pop * 0.004 * b.mine);
       st.pop = Math.max(50, st.pop - dead);
       s.stats.labourDeaths += dead;
